@@ -1,0 +1,2 @@
+Get stickkit to dump .rad segments and nodes as 10 different "def6"-type things
+That way, I can turn def0 into "light" and the others into "glow"
