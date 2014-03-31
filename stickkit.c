@@ -43,6 +43,7 @@ int update_node_group_stats (node_group_ptr, int);
 int update_radius_group_stats (rad_group_ptr);
 int update_tangent_group_stats (tan_group_ptr, int);
 int dump_stats (seg_group_ptr);
+int prune_once (seg_group_ptr);
 int merge_close_nodes (node_group_ptr, int, double);
 void delete_segment (node_ptr, node_ptr, seg_ptr, int);
 int split_long_segs (seg_group_ptr, double, int, int);
@@ -187,6 +188,19 @@ int main (int argc, char **argv) {
           action[nactions].darg[0] = 1.;
         } else {
           action[nactions].darg[0] = atof(argv[++i]);
+        }
+        nactions++;
+      } else if (strncmp(argv[i], "-prune", 3) == 0) {
+        (void) allocate_action (&action[nactions], prune);
+        if (action[nactions].iarg[0] = atoi(argv[++i])) {
+          // if we could convert it to an int check its value
+          if (action[nactions].iarg[0] < 1) {
+            action[nactions].iarg[0] = 1;
+          }
+        } else {
+          // if it wasn't an int, rewind one and continue
+          --i;
+          action[nactions].iarg[0] = 1;
         }
         nactions++;
       } else if (strncmp(argv[i], "-treeradius", 4) == 0) {
@@ -490,6 +504,15 @@ int main (int argc, char **argv) {
       fprintf (stderr,"split\n");
       (void) split_and_write_rad (segs, root);
 
+    // remove nodes and segments close to tips
+    } else if (action[act].type == prune) {
+
+      fprintf (stderr,"prune\n");
+      for (i=0; i<action[act].iarg[0]; i++) {
+        int num_pruned = prune_once (segs);
+        fprintf (stderr,"  pruned %d segments\n",num_pruned);
+      }
+
     // dump statistics and quit
     } else if (action[act].type == info) {
 
@@ -575,6 +598,11 @@ void allocate_action (ACTION *action, ACTION_NAME type) {
     // no need for arguments
     action->nc = 0;
     action->ni = 0;
+    action->nd = 0;
+  } else if (type == prune) {
+    // no need for arguments
+    action->nc = 0;
+    action->ni = 1;
     action->nd = 0;
   } else if (type == none) {
     // no operation!
@@ -697,7 +725,7 @@ int dump_stats (seg_group_ptr thisSG) {
   int i;
 
   fprintf(stdout,"# number of dimensions %d\n",thisSG->dim);
-  fprintf(stdout,"# number of segment blocks %d\n",thisSG->numblock);
+  fprintf(stdout,"# number of segment blocks %d\n",thisSG->numblock+1);
   fprintf(stdout,"# number of segments %ld\n",thisSG->num);
   fprintf(stdout,"# number of nodes %ld\n",thisSG->nodes->num);
   fprintf(stdout,"#   node minima");
@@ -707,8 +735,10 @@ int dump_stats (seg_group_ptr thisSG) {
   for (i=0; i<thisSG->dim; i++) fprintf(stdout," %g",thisSG->nodes->max[i]);
   fprintf(stdout,"\n");
   fprintf(stdout,"# number of radii %ld\n",thisSG->radii->num);
-  fprintf(stdout,"#   radius minimum %g\n",thisSG->radii->min);
-  fprintf(stdout,"#   radius maximum %g\n",thisSG->radii->max);
+  if (thisSG->radii->num > 0) {
+    fprintf(stdout,"#   radius minimum %g\n",thisSG->radii->min);
+    fprintf(stdout,"#   radius maximum %g\n",thisSG->radii->max);
+  }
   fprintf(stdout,"# number of tangents %ld\n",thisSG->tangents->num);
 
   return(0);
@@ -959,34 +989,43 @@ void delete_segment (node_ptr keepnode, node_ptr delnode, seg_ptr delseg,
 
   // throw away the index and the flag of the old node
 
-  // and set the new flag to indicate that it's participated in a merge
+  // and set the new flag to indicate that it's participated this merge
   keepnode->flag = TRUE;
 
   // relocate keepnode, weight by number of connections
   num_link_keep = keepnode->numconn0 + keepnode->numconn1;
   num_link_del = delnode->numconn0 + delnode->numconn1;
   //fprintf (stderr, "    num_link_keep %d, num_link_del %d\n",num_link_keep,num_link_del);
-  if (num_link_keep == 1 && num_link_del == 2) {
-    weight = 1.0;
-  } else if (num_link_keep == 2 && num_link_del == 1) {
+  if (num_link_keep == 1) {
     weight = 0.0;
+  } else if (num_link_del == 1) {
+    weight = 1.0;
   } else {
-    weight = (double)num_link_keep/(double)(num_link_keep+num_link_del);
+    weight = (double)(num_link_keep-1)/(double)(num_link_keep+num_link_del-2);
   }
-  for (i=0; i<dim; i++)
+
+  // This is fixed now---any simply-supported segment is cleanly deleted
+  for (i=0; i<dim; i++) {
     keepnode->x[i] = weight*keepnode->x[i] + (1.-weight)*delnode->x[i];
-  // now, find the new radius
-  if (keepis0) {
-    keeprad = delseg->r[0];
-    delrad = delseg->r[1];
-    newrad = add_radius (delseg->parent->radii, weight*delseg->r[0]->r +
-                         (1.-weight)*delseg->r[1]->r, 0);
-  } else {
-    keeprad = delseg->r[1];
-    delrad = delseg->r[0];
-    newrad = add_radius (delseg->parent->radii, weight*delseg->r[1]->r +
-                         (1.-weight)*delseg->r[0]->r, 0);
   }
+  // now, find the new radius, if there are radii at all
+  if (delseg->parent->radii->first) {
+    if (keepis0) {
+      keeprad = delseg->r[0];
+      delrad = delseg->r[1];
+      newrad = add_radius (delseg->parent->radii, weight*delseg->r[0]->r +
+                           (1.-weight)*delseg->r[1]->r, 0);
+    } else {
+      keeprad = delseg->r[1];
+      delrad = delseg->r[0];
+      newrad = add_radius (delseg->parent->radii, weight*delseg->r[1]->r +
+                           (1.-weight)*delseg->r[0]->r, 0);
+    }
+  } else {
+    keeprad = NULL;
+    newrad = NULL;
+  }
+
   // do something with this!
   // assign it to all still-connected segments
   for (i=0; i<keepnode->numconn0; i++)
@@ -1004,33 +1043,37 @@ void delete_segment (node_ptr keepnode, node_ptr delnode, seg_ptr delseg,
 
   // copy all conn0 linkages from delnode to keepnode
   //fprintf (stderr, "    numconn0: %d + %d",keepnode->numconn0,delnode->numconn0);
-  newconnlist = (seg_ptr*) malloc (
-                (keepnode->numconn0 + delnode->numconn0) * sizeof(seg_ptr));
-  for (i=0; i<keepnode->numconn0; i++) newconnlist[i] = keepnode->conn0[i];
-  for (i=0; i<delnode->numconn0; i++) {
-    delnode->conn0[i]->n[0] = keepnode;
-    // add these to keepnode->conn0
-    newconnlist[i + keepnode->numconn0] = delnode->conn0[i];
+  if (delnode->numconn0 > 0) {
+    newconnlist = (seg_ptr*) malloc (
+                  (keepnode->numconn0 + delnode->numconn0) * sizeof(seg_ptr));
+    for (i=0; i<keepnode->numconn0; i++) newconnlist[i] = keepnode->conn0[i];
+    for (i=0; i<delnode->numconn0; i++) {
+      delnode->conn0[i]->n[0] = keepnode;
+      // add these to keepnode->conn0
+      newconnlist[i + keepnode->numconn0] = delnode->conn0[i];
+    }
+    free (keepnode->conn0);
+    keepnode->conn0 = newconnlist;
+    keepnode->numconn0 += delnode->numconn0;
+    //fprintf (stderr, " = %d\n",keepnode->numconn0);
   }
-  free (keepnode->conn0);
-  keepnode->conn0 = newconnlist;
-  keepnode->numconn0 += delnode->numconn0;
-  //fprintf (stderr, " = %d\n",keepnode->numconn0);
 
   // copy all conn1 linkages from delnode to keepnode
   //fprintf (stderr, "    numconn1: %d + %d",keepnode->numconn1,delnode->numconn1);
-  newconnlist = (seg_ptr*) malloc (
-                (keepnode->numconn1 + delnode->numconn1) * sizeof(seg_ptr));
-  for (i=0; i<keepnode->numconn1; i++) newconnlist[i] = keepnode->conn1[i];
-  for (i=0; i<delnode->numconn1; i++) {
-    delnode->conn1[i]->n[1] = keepnode;
-    // add these to keepnode->conn1
-    newconnlist[i + keepnode->numconn1] = delnode->conn1[i];
+  if (delnode->numconn1 > 0) {
+    newconnlist = (seg_ptr*) malloc (
+                  (keepnode->numconn1 + delnode->numconn1) * sizeof(seg_ptr));
+    for (i=0; i<keepnode->numconn1; i++) newconnlist[i] = keepnode->conn1[i];
+    for (i=0; i<delnode->numconn1; i++) {
+      delnode->conn1[i]->n[1] = keepnode;
+      // add these to keepnode->conn1
+      newconnlist[i + keepnode->numconn1] = delnode->conn1[i];
+    }
+    free (keepnode->conn1);
+    keepnode->conn1 = newconnlist;
+    keepnode->numconn1 += delnode->numconn1;
+    //fprintf (stderr, " = %d\n",keepnode->numconn1);
   }
-  free (keepnode->conn1);
-  keepnode->conn1 = newconnlist;
-  keepnode->numconn1 += delnode->numconn1;
-  //fprintf (stderr, " = %d\n",keepnode->numconn1);
 
   // if it's the first node, reset the first pointer
   if (delnode->parent->first == delnode)
@@ -1042,6 +1085,7 @@ void delete_segment (node_ptr keepnode, node_ptr delnode, seg_ptr delseg,
   if (delnode->next) delnode->next->prev = delnode->prev;
 
   // remove delnode
+  //fprintf (stderr, "    deleting node %ld\n",delnode->index);
   free (delnode->conn0);
   free (delnode->conn1);
   free (delnode);
@@ -1868,6 +1912,50 @@ int find_root_of_each_strand (seg_group_ptr thisSG, ACTION *args) {
 
 
 /*
+ * Remove any tip nodes and their connected segments
+ */
+int prune_once (seg_group_ptr thisSG) {
+
+  int cnt = 0;
+  int n0conn,n1conn;
+  seg_ptr curr;
+
+  // make sure we don't just zipper delete a long strand
+  (void) set_node_flags (thisSG->nodes, FALSE);
+
+  // search structures for nodes with only one connected segment
+  curr = thisSG->first;
+  while (curr) {
+
+    // if either node has been part of a merge/delete, skip this segment
+    if (!curr->n[0]->flag && !curr->n[1]->flag) {
+
+      // how many connected segments does it have
+      n0conn = curr->n[0]->numconn0 + curr->n[0]->numconn1;
+      n1conn = curr->n[1]->numconn0 + curr->n[1]->numconn1;
+
+      // if one node has only one segment, knock it out
+      if (n0conn == 1) {
+        // remove that segment and then remove that node
+        delete_segment (curr->n[1], curr->n[0], curr, thisSG->dim);
+        cnt++;
+      } else if (n1conn == 1) {
+        // remove that segment and then remove that node
+        delete_segment (curr->n[0], curr->n[1], curr, thisSG->dim);
+        cnt++;
+      }
+    }
+
+    curr = curr->next;
+  }
+
+  // now prune all unattached nodes
+
+  return (cnt);
+}
+
+
+/*
  * Set as many segment radii as possible
  *
  * Only works for dimensions 2 and 3 (or first 3 dimensions of d>3)
@@ -2294,17 +2382,18 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
   // open the file for reading
   infp = fopen (infile,"r");
   if (infp==NULL) {
-    fprintf (stderr,"Could not open input file %s\n",infile);
-    fprintf (stderr,"Exiting\n");
+    fprintf (stderr,"  Could not open input file %s\n",infile);
+    fprintf (stderr,"  Exiting\n");
     exit (0);
   }
-  fprintf (stderr,"Opening file %s\n",infile);
-  fprintf (stderr,"Prescanning");
+  fprintf (stderr,"  Opening file %s\n",infile);
+  fprintf (stderr,"  Prescanning");
   fflush (stderr);
 
   // read the first character after the newline
   nnode = 0;
   nrad = 0;
+  ntan = 0;
   nlines = 0;
   while (fread (&onechar,sizeof(char),1,infp) == 1) {
 
@@ -2336,52 +2425,21 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         fscanf (infp,"%[\n]",twochar);	// read newline
       }
 
-    } else {
-      // if its not identifiable, skip it
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
+    } else if (onechar == 'd') {
+      // the dimensionality
+      fscanf (infp,"%s",newval);
+      thisSG->dim = (char)atoi(newval);
+      if (thisSG->dim > MAXDIM) {
+        fprintf (stderr,"ERROR (read_seg): input file's dim is %d, but\n",
+                 thisSG->dim);
+        fprintf (stderr,"  the maximum spatial dimensions allowed is %d.\n",
+                 (MAXDIM));
+        fprintf (stderr,"  Quitting.\n");
+        exit(1);
+      }
+      fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
       fscanf (infp,"%[\n]",twochar);	// read newline
-    }
-
-    if (++nlines%DOTPER == 1) {
-      fprintf(stderr,".");
-      fflush(stderr);
-    }
-  }
-
-  // close it
-  fclose(infp);
-  fprintf(stderr,"%d nodes, %d radii\n",nnode,nrad);
-  fflush(stderr);
-
-  // malloc space for an array of pointers
-  thenodes = (node_ptr*) malloc ((nnode+1) * sizeof(node_ptr));
-  therads = (rad_ptr*) malloc ((nrad+1) * sizeof(rad_ptr));
-  thetans = (tan_ptr*) malloc ((ntan+1) * sizeof(tan_ptr));
-
-  // then, reopen the file and read in the vertexes and segments =========
-
-  // open the file for reading
-  infp = fopen (infile,"r");
-  if (infp==NULL) {
-    fprintf (stderr,"Could not open input file %s\n",infile);
-    fprintf (stderr,"Exiting\n");
-    exit (0);
-  }
-  //fprintf (stderr,"Opening file %s\n",infile);
-  fprintf (stderr,"Reading");
-  fflush (stderr);
-
-  // read the first character after the newline
-  nnode = 0;
-  nrad = 0;
-  nlines = 0;
-  while (fread (&onechar,sizeof(char),1,infp) == 1) {
-
-    // split on first character
-    if (onechar == '#') {
-      // read a comment line
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
-      fscanf (infp,"%[\n]",twochar);	// read newline
+      //fprintf (stderr,"set dimensionality to %d\n",(int)thisSG->dim);
 
     } else if (onechar == 'g') {
       // this is some form of global variable
@@ -2400,21 +2458,55 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         fscanf (infp,"%[\n]",twochar);	// read newline
       }
 
-    } else if (onechar == 'd') {
-      // the dimensionality
-      fscanf (infp,"%s",newval);
-      thisSG->dim = (char)atoi(newval);
-      if (thisSG->dim > MAXDIM) {
-        fprintf (stderr,"ERROR (read_seg): input file's dim is %d, but\n",
-                 thisSG->dim);
-        fprintf (stderr,"  the maximum spatial dimensions allowed is %d.\n",
-                 (MAXDIM));
-        fprintf (stderr,"  Quitting.\n");
-        exit(1);
-      }
-      fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
+    } else {
+      // if its not identifiable, skip it
+      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
       fscanf (infp,"%[\n]",twochar);	// read newline
-      //fprintf (stderr,"set dimensionality to %d\n",(int)thisSG->dim);
+    }
+
+    if (++nlines%DOTPER == 1) {
+      fprintf(stderr,".");
+      fflush(stderr);
+    }
+  }
+
+  // close it
+  fclose(infp);
+  fprintf(stderr,"%d nodes",nnode);
+  if (nrad > 0) fprintf(stderr,", %d radii\n",nrad);
+  if (ntan > 0) fprintf(stderr,", %d tangents\n",ntan);
+  fprintf(stderr,"\n");
+  fflush(stderr);
+
+  // malloc space for an array of pointers
+  thenodes = (node_ptr*) malloc ((nnode+1) * sizeof(node_ptr));
+  therads = (rad_ptr*) malloc ((nrad+1) * sizeof(rad_ptr));
+  thetans = (tan_ptr*) malloc ((ntan+1) * sizeof(tan_ptr));
+
+  // then, reopen the file and read in the vertexes and segments =========
+
+  // open the file for reading
+  infp = fopen (infile,"r");
+  if (infp==NULL) {
+    fprintf (stderr,"  Could not open input file %s\n",infile);
+    fprintf (stderr,"  Exiting\n");
+    exit (0);
+  }
+  //fprintf (stderr,"  Opening file %s\n",infile);
+  fprintf (stderr,"  Reading");
+  fflush (stderr);
+
+  // read the first character after the newline
+  nnode = 0;
+  nrad = 0;
+  nlines = 0;
+  while (fread (&onechar,sizeof(char),1,infp) == 1) {
+
+    // split on first character
+    if (onechar == '#') {
+      // read a comment line
+      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
+      fscanf (infp,"%[\n]",twochar);	// read newline
 
     } else if (onechar == 'v') {
       // this is some form of vertex information
@@ -2615,6 +2707,8 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
 
   // remove the temporary array
   free (thenodes);
+  free (therads);
+  free (thetans);
 
   // if things bomb, send back a nonzero
   return (0);
@@ -3578,7 +3672,7 @@ int write_seg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
   tan_ptr currt;
   seg_ptr curr;
 
-  fprintf (stderr,"Writing .seg file");
+  fprintf (stderr,"  Writing .seg file");
   fflush (stderr);
 
   // set all flags to TRUE (true==not been printed yet)
@@ -4652,6 +4746,9 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -roughen [s]  roughen structure by perturbing nodes, s is scale",
      "               factor; default s=1",
+     " ",
+     "   -prune [l]  prune any segments within l nodes from a tip;",
+     "               default l=1",
      " ",
      "   -treeradius [s [dim [val]]]",
      "               set all radii to mimic woody plant growth,",

@@ -47,7 +47,9 @@
 // Version 0.5: added -split option
 //#define VERSION ("stickkit, version 0.5 2009-04-05 MJS")
 // Version 0.6: added -rscale option
-#define VERSION ("stickkit, version 0.6 2014-03-06 MJS")
+//#define VERSION ("stickkit, version 0.6 2014-03-06 MJS")
+// Version 0.7: added -prune option
+#define VERSION ("stickkit, version 0.7 2014-03-30 MJS")
 
 // begin with the data structures
 
@@ -166,7 +168,8 @@ typedef enum action_type {
   translate,	// translate all nodes by x,y,z
   scale,	// scale all nodes by x,y,z
   rscale,	// scale all radii by either value 1, or linearly between values 1 and 2
-  split		// split all segments along the longest axis, write both to .rad files
+  split,	// split all segments along the longest axis, write both to .rad files
+  prune		// clip segments within a distance from a tip
   //resample,	// resample a strand to a fixed segment length
   //smooth,	// nudge nodes to smooth the curve
 } ACTION_NAME;
