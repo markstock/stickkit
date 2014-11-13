@@ -2403,26 +2403,18 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
 
       if (isspace (anotherchar)) {
         // this is an actual vertex
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
         // count it
         nnode++;
       } else if (anotherchar == 'r') {
         // this is a radius
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
         // count it
         nrad++;
       } else if (anotherchar == 'n') {
         // this is a tangent
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
         // count it
         ntan++;
       } else {
         // skip it
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
       }
 
     } else if (onechar == 'd') {
@@ -2437,8 +2429,6 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         fprintf (stderr,"  Quitting.\n");
         exit(1);
       }
-      fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-      fscanf (infp,"%[\n]",twochar);	// read newline
       //fprintf (stderr,"set dimensionality to %d\n",(int)thisSG->dim);
 
     } else if (onechar == 'g') {
@@ -2449,20 +2439,18 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         // the global radius
         fscanf (infp,"%s",newval);
         thisSG->radius = atof(newval);
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
         //fprintf (stderr,"set radius to %g\n",thisSG->radius);
       } else {
         // nothing important
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
       }
 
     } else {
       // if its not identifiable, skip it
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
-      fscanf (infp,"%[\n]",twochar);	// read newline
     }
+
+    // finish reading the line and the CR
+    fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
+    fscanf (infp,"%[\n]",twochar);	// read newline
 
     if (++nlines%DOTPER == 1) {
       fprintf(stderr,".");
@@ -2505,8 +2493,6 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
     // split on first character
     if (onechar == '#') {
       // read a comment line
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
-      fscanf (infp,"%[\n]",twochar);	// read newline
 
     } else if (onechar == 'v') {
       // this is some form of vertex information
@@ -2538,9 +2524,6 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         // put it in the list
         //thenodes[thisSG->nodes->num] = newnode;
         thenodes[++nnode] = newnode;
-        // and finish reading
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
 
       } else if (anotherchar == 'r') {
         // this is a radius
@@ -2548,8 +2531,6 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         fscanf (infp,"%s",newval);
         newrad = add_radius (thisSG->radii, atof(newval), 0);
         therads[++nrad] = newrad;
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
 
       } else if (anotherchar == 'n') {
         // this is a tangent
@@ -2559,13 +2540,9 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         }
         //newtan = add_tangent (thisSG->tangents, atof(newval), 0);
         //thetans[++ntan] = newtan;
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
 
       } else {
         // skip it
-        fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
-        fscanf (infp,"%[\n]",twochar);	// read newline
       }
 
     } else if (onechar == 's') {
@@ -2586,7 +2563,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
         if (newval[i] == '/' || newval[i] == '\0') break;
       strncpy(sub,newval,i);
       sub[i] = '\0';
-      n0index = atoi(sub);
+      if (i>0) n0index = atoi(sub);
       //fprintf (stderr,"i %d, sub (%s) (%d)\n",i,sub,atoi(sub));
       // should we continue?
       if (newval[i] == '/') {
@@ -2594,7 +2571,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
           if (newval[j] == '/' || newval[j] == '\0') break;
         strncpy(sub,newval+i+1,j);
         sub[j-i-1] = '\0';
-        n0rad = atoi(sub);
+        if (j-i > 1) n0rad = atoi(sub);
         //fprintf (stderr,"i %d, j %d, sub (%s) (%d)\n",i,j,sub,atoi(sub));
         // should we continue?
         if (newval[j] == '/') {
@@ -2602,7 +2579,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
             if (newval[k] == '/' || newval[k] == '\0') break;
           strncpy(sub,newval+j+1,k);
           sub[k-j-1] = '\0';
-          n0tan = atoi(sub);
+          if (k-j > 1) n0tan = atoi(sub);
           //fprintf (stderr,"j %d, k %d, sub (%s) (%d)\n",j,k,sub,atoi(sub));
         }
       }
@@ -2684,15 +2661,13 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
       if (n0tan > -1) newseg->t[0] = thetans[n0tan];
       if (n1tan > -1) newseg->t[1] = thetans[n1tan];
 
-      // finish reading the line
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
-      fscanf (infp,"%[\n]",twochar);	// read newline
-
     } else {
       // if its not identifiable, skip it
-      fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
-      fscanf (infp,"%[\n]",twochar);	// read newline
     }
+
+    // and finish reading
+    fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
+    fscanf (infp,"%[\n]",twochar);	// read newline
 
     if (++nlines%DOTPER == 1) {
       fprintf(stderr,".");
