@@ -102,10 +102,16 @@ unsigned char*** allocate_3d_array_b(int nx, int ny, int nz) {
    return(array);
 }
 
-int free_3d_array_b(unsigned char*** array, int nx){
-   for (int i=0; i<nx; i++) {
-      free(array[i][0]);
-      free(array[i]);
+int free_3d_array_b(unsigned char*** array, int nx, int ny, int nz){
+   long int totBytes = (long int)nx * (long int)ny * (long int)nz * (long int)sizeof(char);
+   if (totBytes > (long int)INT_MAX/2) {
+      for (int i=0; i<nx; i++) {
+         free(array[i][0]);
+         free(array[i]);
+      }
+   } else {
+      free(array[0][0]);
+      free(array[0]);
    }
    free(array);
    return(0);
@@ -125,12 +131,14 @@ int write_bob_file_from_uchar(FILE* ofp, unsigned char*** z, int nx, int ny, int
    fwrite(&nz,sizeof(int),1,ofp);
 
    /* write the data */
-   for (i=0;i<nx;i++)
-   for (j=0;j<ny;j++)
+   for (i=0;i<nx;i++) {
+   for (j=0;j<ny;j++) {
    for (k=0;k<nz;k++) {
       //val = (unsigned char)(256.0*(z[i][j][k]-minVal)/range);
       //fwrite(&val,sizeof(unsigned char),1,ofp);
       fwrite(&z[i][j][k],sizeof(unsigned char),1,ofp);
+   }
+   }
    }
 
    /* return 0 if all went well */
@@ -272,7 +280,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   }
   }
 
-  fprintf(stderr,"  writing");
+  fprintf(stderr,"  computing");
   fflush(stderr);
 
   if (FALSE) {
@@ -381,10 +389,12 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   fflush(stderr);
 
   // finally, write the file
+  fprintf(stderr,"  writing...\n");
+  fflush(stderr);
   (void) write_bob_file_from_uchar(ofp, dat, nx, ny, nz);
 
   // free the memory and return
-  free_3d_array_b(dat, nx);
+  free_3d_array_b(dat, nx, ny, nz);
 
   return(0);
 }
