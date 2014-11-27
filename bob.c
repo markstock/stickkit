@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <limits.h>
 #include "stickkit.h"
 
 #define MIN(a,b) ({ \
@@ -62,28 +63,50 @@ extern int update_node_group_stats (node_group_ptr, int);
 
 // file-local declarations
 unsigned char*** allocate_3d_array_b(int nx, int ny, int nz) {
-   int i,j;
+
+   // allocate an array of nx pointers, one for each plane
    unsigned char ***array = (unsigned char ***)malloc(nx * sizeof(char **));
 
-   array[0] = (unsigned char **)malloc(nx * ny * sizeof(char *));
-   array[0][0] = (unsigned char *)malloc(nx * ny * nz * sizeof(char));
+   // are we dealing with more than 2B bytes?
+   // On x86-64 Linux, INT_MAX is 2147483647, LONG_MAX is 9223372036854775807
+   long int totBytes = (long int)nx * (long int)ny * (long int)nz * (long int)sizeof(char);
 
-   for (i=1; i<nx; i++)
-      array[i] = array[0] + i * ny;
+   if (totBytes > (long int)INT_MAX/2) {
+      // all data is larger than 2GB, allocate it in planes
+      fprintf(stderr,"  voxel array is plane-by-plane\n");
 
-   for (i=0; i<nx; i++) {
-      if (i!=0)
-         array[i][0] = array[0][0] + i * ny * nz;
-      for (j=1; j<ny; j++)
-         array[i][j] = array[i][0] + j * nz;
+      for (int i=0; i<nx; i++) {
+         array[i] = (unsigned char **)malloc(ny * sizeof(char *));
+         array[i][0] = (unsigned char *)malloc(ny * nz * sizeof(char));
+         for (int j=1; j<ny; j++)
+            array[i][j] = array[i][0] + j * nz;
+      }
+
+   } else {
+      // we can fit it all in one malloc (it's under 2GB)
+      fprintf(stderr,"  voxel array is monolithic\n");
+
+      array[0] = (unsigned char **)malloc(nx * ny * sizeof(char *));
+      for (int i=1; i<nx; i++)
+         array[i] = array[0] + i * ny;
+
+      array[0][0] = (unsigned char *)malloc(nx * ny * nz * sizeof(char));
+      for (int i=0; i<nx; i++) {
+         if (i!=0)
+            array[i][0] = array[0][0] + i * ny * nz;
+         for (int j=1; j<ny; j++)
+            array[i][j] = array[i][0] + j * nz;
+      }
    }
 
    return(array);
 }
 
-int free_3d_array_b(unsigned char*** array){
-   free(array[0][0]);
-   free(array[0]);
+int free_3d_array_b(unsigned char*** array, int nx){
+   for (int i=0; i<nx; i++) {
+      free(array[i][0]);
+      free(array[i]);
+   }
    free(array);
    return(0);
 }
@@ -361,7 +384,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   (void) write_bob_file_from_uchar(ofp, dat, nx, ny, nz);
 
   // free the memory and return
-  free_3d_array_b(dat);
+  free_3d_array_b(dat, nx);
 
   return(0);
 }
