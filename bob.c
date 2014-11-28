@@ -122,23 +122,14 @@ int free_3d_array_b(unsigned char*** array, int nx, int ny, int nz){
  */
 int write_bob_file_from_uchar(FILE* ofp, unsigned char*** z, int nx, int ny, int nz) {
 
-   int i,j,k;
-   //unsigned char val;
-
    /* write header */
    fwrite(&nx,sizeof(int),1,ofp);
    fwrite(&ny,sizeof(int),1,ofp);
    fwrite(&nz,sizeof(int),1,ofp);
 
    /* write the data */
-   for (i=0;i<nx;i++) {
-   for (j=0;j<ny;j++) {
-   for (k=0;k<nz;k++) {
-      //val = (unsigned char)(256.0*(z[i][j][k]-minVal)/range);
-      //fwrite(&val,sizeof(unsigned char),1,ofp);
-      fwrite(&z[i][j][k],sizeof(unsigned char),1,ofp);
-   }
-   }
+   for (int i=0; i<nx; i++) {
+      fwrite(&z[i][0][0],sizeof(unsigned char),ny*nz,ofp);
    }
 
    /* return 0 if all went well */
