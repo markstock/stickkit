@@ -262,10 +262,12 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   fprintf(stderr,"  brick will be %d x %d x %d\n",nx,ny,nz);
 
   // sanity check on bob size
-  if (nx*(float)ny*nz > 2.e+9 || nx > 100000 || ny > 100000 || nz > 100000) {
-    fprintf(stderr,"Will not write brick-of-bytes file that large.\n");
+  if (nx*(float)ny*nz > 1.e+11 || nx > 100000 || ny > 100000 || nz > 100000) {
+    fprintf(stderr,"Are you sure you want to write a brick-of-bytes file that large?\n");
+    fprintf(stderr,"  Hit enter to continue, control-c to quit.\n");
     fflush(stderr);
-    return(1);
+    char buf[2];
+    fread(&buf, sizeof(char), 1, stdin);
   }
 
   // allocate space for the brick
