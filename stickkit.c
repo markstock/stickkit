@@ -197,12 +197,10 @@ int main (int argc, char **argv) {
           if (action[nactions].iarg[0] < 1) {
             action[nactions].iarg[0] = 1;
           }
+          nactions++;
         } else {
-          // if it wasn't an int, rewind one and continue
-          --i;
-          action[nactions].iarg[0] = 1;
+          // if it wasn't an int, or it was 0, just don't prune
         }
-        nactions++;
       } else if (strncmp(argv[i], "-treeradius", 4) == 0) {
         (void) allocate_action (&action[nactions], treeradius);
         if (isalpha(argv[i+1][1])) {
@@ -2461,8 +2459,8 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
   // close it
   fclose(infp);
   fprintf(stderr,"%d nodes",nnode);
-  if (nrad > 0) fprintf(stderr,", %d radii\n",nrad);
-  if (ntan > 0) fprintf(stderr,", %d tangents\n",ntan);
+  if (nrad > 0) fprintf(stderr,", %d radii",nrad);
+  if (ntan > 0) fprintf(stderr,", %d tangents",ntan);
   fprintf(stderr,"\n");
   fflush(stderr);
 
