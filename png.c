@@ -26,8 +26,8 @@
  */
 
 #include <stdlib.h>
+#include <math.h>
 #include <png.h>
-//#include "png.h"
 #include "stickkit.h"
 
 #define png_infopp_NULL (png_infopp)NULL
@@ -39,198 +39,402 @@ int free_2d_array_pb (png_byte**);
 float** allocate_2d_array_f(int,int);
 int free_2d_array_f (float**);
 
-//void writePngPixels (const char*, const Array<png_byte,2>&, const bool);
-//void readPngPixels (char*, png_byte**);
 float** read_png_pixels (char*, float, float, int*, int*);
+
+int write_png_file (FILE*, int, int, int, float**, float, float);
+int write_png (FILE*, seg_group_ptr, int);
 
 // externs from stickkit.c
 extern node_ptr add_node (node_group_ptr, unsigned char, double*, int);
 extern seg_ptr add_segment (seg_group_ptr, node_ptr, node_ptr);
 
-/*
+// externs from bob.c
+extern int min(int, int);
+extern int max(int, int);
+
+// ------------- OUTPUT ----------------------------------------------------
+
 //
 // scale and write an array to a png
 //
-int writeArrayToPng (Array<double,2>& data, int plotType, bool useBlackWhite, double black, double white) {
+int write_png_file (FILE* fp, int nx, int ny, int high_depth,
+   float **red, float redmin, float redrange) {
 
-  static int frameCount = 0;
+   int autorange = TRUE;
+   int i,j,printval,bit_depth;
+   char outfile[80];
+   float newminrange,newmaxrange;
+   // gamma of 1.8 looks normal on most monitors...that display properly.
+   //float gamma = 1.8;
+   // must do 5/9 for stuff to look right on Macs....why? I dunno.
+   float gamma = .55555;
+   //FILE *fp;
+   png_uint_32 height,width;
+   png_structp png_ptr;
+   png_infop info_ptr;
+   static png_byte **img;
+   static int is_allocated = FALSE;
 
-  // check the incoming Array
-  if (data.dimensions() != 2) {
-    cerr << "Error (writeArrayToPng): array not 2D!" << endl;
-    exit(0);
+   // set specific bit depth
+   if (high_depth) bit_depth = 16;
+   else bit_depth = 8;
+
+   // allocate the space for the special array
+   if (!is_allocated) {
+      img = allocate_2d_array_pb(nx,ny,bit_depth);
+      is_allocated = TRUE;
+   }
+
+   // set the sizes in png-understandable format
+   height=ny;
+   width=nx;
+
+   // auto-set the ranges
+   if (autorange) {
+
+      // first red
+      newminrange = 9.9e+9;
+      newmaxrange = -9.9e+9;
+      for (i=0; i<nx; i++) {
+         for (j=ny-1; j>=0; j--) {
+            if (red[i][j]<newminrange) newminrange=red[i][j];
+            if (red[i][j]>newmaxrange) newmaxrange=red[i][j];
+         }
+      }
+      //printf("range %g %g\n",newminrange,newmaxrange);
+      redmin = newminrange;
+      redrange = newmaxrange-newminrange;
+
+   } else {
+       // report the range
+      newminrange = 9.9e+9;
+      newmaxrange = -9.9e+9;
+      for (i=0; i<nx; i++) {
+         for (j=ny-1; j>=0; j--) {
+            if (red[i][j]<newminrange) newminrange=red[i][j];
+            if (red[i][j]>newmaxrange) newmaxrange=red[i][j];
+         }
+      }
+      printf("  output range %g %g\n",newminrange,newmaxrange);
+   }
+ 
+   // make the preliminary filename (write the pgm to outfile)
+   //sprintf(outfile,"%s.png",outfileroot);
+
+   // write the file
+   //fp = fopen(outfile,"wb");
+   //if (fp==NULL) {
+   //   fprintf(stderr,"Could not open output file %s\n",outfile);
+   //   fflush(stderr);
+   //   exit(0);
+   //}
+
+   // monochrome image, read data from red array
+   // no scaling, 16-bit per channel
+   if (high_depth) {
+     // am I looping these coordinates in the right memory order?
+     for (j=ny-1; j>=0; j--) {
+       for (i=0; i<nx; i++) {
+         printval = (int)(0.5 + 65535*(red[i][j]-redmin)/redrange);
+         if (printval<0) printval = 0;
+         else if (printval>65535) printval = 65535;
+         img[ny-1-j][2*i] = (png_byte)(printval/256);
+         img[ny-1-j][2*i+1] = (png_byte)(printval%256);
+       }
+     }
+
+   // no scaling, 8-bit per channel
+   } else {
+     // am I looping these coordinates in the right memory order?
+     for (j=ny-1; j>=0; j--) {
+       for (i=0; i<nx; i++) {
+         printval = (int)(0.5 + 256*(red[i][j]-redmin)/redrange);
+         if (printval<0) printval = 0;
+         else if (printval>255) printval = 255;
+         img[ny-1-j][i] = (png_byte)printval;
+       }
+     }
+   }
+
+   /* Create and initialize the png_struct with the desired error handler
+    * functions.  If you want to use the default stderr and longjump method,
+    * you can supply NULL for the last three parameters.  We also check that
+    * the library version is compatible with the one used at compile time,
+    * in case we are using dynamically linked libraries.  REQUIRED.
+    */
+   png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING,
+      NULL, NULL, NULL);
+
+   if (png_ptr == NULL) {
+      //fclose(fp);
+      fprintf(stderr,"Could not create png struct\n");
+      fflush(stderr);
+      exit(0);
+      return (-1);
+   }
+
+   /* Allocate/initialize the image information data.  REQUIRED */
+   info_ptr = png_create_info_struct(png_ptr);
+   if (info_ptr == NULL) {
+      //fclose(fp);
+      png_destroy_write_struct(&png_ptr,(png_infopp)NULL);
+      return (-1);
+   }
+
+   /* Set error handling.  REQUIRED if you aren't supplying your own
+    * error handling functions in the png_create_write_struct() call.
+    */
+   if (setjmp(png_jmpbuf(png_ptr))) {
+      /* If we get here, we had a problem reading the file */
+      //fclose(fp);
+      png_destroy_write_struct(&png_ptr, &info_ptr);
+      return (-1);
+   }
+
+   /* set up the output control if you are using standard C streams */
+   png_init_io(png_ptr, fp);
+
+   /* Set the image information here.  Width and height are up to 2^31,
+    * bit_depth is one of 1, 2, 4, 8, or 16, but valid values also depend on
+    * the color_type selected. color_type is one of PNG_COLOR_TYPE_GRAY,
+    * PNG_COLOR_TYPE_GRAY_ALPHA, PNG_COLOR_TYPE_PALETTE, PNG_COLOR_TYPE_RGB,
+    * or PNG_COLOR_TYPE_RGB_ALPHA.  interlace is either PNG_INTERLACE_NONE or
+    * PNG_INTERLACE_ADAM7, and the compression_type and filter_type MUST
+    * currently be PNG_COMPRESSION_TYPE_BASE and PNG_FILTER_TYPE_BASE. REQUIRED
+    */
+   png_set_IHDR(png_ptr, info_ptr, width, height, bit_depth,
+      PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
+      PNG_FILTER_TYPE_BASE);
+
+   /* Optional gamma chunk is strongly suggested if you have any guess
+    * as to the correct gamma of the image. */
+   //png_set_gAMA(png_ptr, info_ptr, 2.2);
+   png_set_gAMA(png_ptr, info_ptr, gamma);
+
+   /* Write the file header information.  REQUIRED */
+   png_write_info(png_ptr, info_ptr);
+
+   /* One of the following output methods is REQUIRED */
+   png_write_image(png_ptr, img);
+
+   /* It is REQUIRED to call this to finish writing the rest of the file */
+   png_write_end(png_ptr, info_ptr);
+
+   /* clean up after the write, and free any memory allocated */
+   png_destroy_write_struct(&png_ptr, &info_ptr);
+
+   // close file
+   //fclose(fp);
+
+   // free the data array
+   free_2d_array_pb(img);
+
+   return(0);
+}
+
+double min_dist_with_rad_2d (double vx, double vy, double vr,
+                          double wx, double wy, double wr,
+                          double px, double py) {
+  // Return minimum distance between fat line segment vw and point p
+  // i.e. |w-v|^2 -  avoid a sqrt
+  const double l2 = pow(vx-wx,2) + pow(vy-wy,2);
+  const double dl = sqrt(l2);
+  const double dvp = sqrt( pow(vx-px,2) + pow(vy-py,2) );
+  const double dwp = sqrt( pow(wx-px,2) + pow(wy-py,2) );
+  // new: one radius overwhelms the entire segment and other endcap
+  if (vr > dl+wr) return dvp - vr;
+  if (wr > dl+vr) return dwp - wr;
+  // Consider the line extending the segment, parameterized as v + t (w - v).
+  // We find projection of point p onto the line. 
+  // It falls where t = [(p-v) . (w-v)] / |w-v|^2
+  double t = ( (px-vx)*(wx-vx) + (py-vy)*(wy-vy) ) / l2;
+  double tadj = t;
+  if (fabs(vr-wr) / dl > 1.e-5) {
+    // segment is enough of a cone to matter
+    // must shift t to account for cone
+    // project to centerline, regardless of t
+    const double jx = vx + t * (wx - vx);
+    const double jy = vy + t * (wy - vy);
+    const double pt = sqrt( pow(jx-px,2) + pow(jy-py,2) );
+    // push t one direction or another
+    tadj = t + (pt/dl) * (wr-vr) / sqrt(l2 - pow(wr-vr,2));
+  }
+  // Beyond the 'v' end of the segment
+  if (tadj < 0.0) return dvp - vr;
+  // Beyond the 'w' end of the segment
+  else if (tadj > 1.0) return dwp - wr;
+  // Projection falls on the segment
+  const double jx = vx + tadj * (wx - vx);
+  const double jy = vy + tadj * (wy - vy);
+  // and find the local radius
+  const double thisRad = vr + tadj*(wr-vr);
+  return sqrt( pow(jx-px,2) + pow(jy-py,2) ) - thisRad;
+}
+
+int write_png (FILE* ofp, seg_group_ptr thisSG, int res) {
+
+  int xdim = 0;
+  int ydim = 2;
+  int nx,ny;
+  double start[2];
+  double size[2];
+
+  // wrong if only 2D
+  if (thisSG->dim > 2) {
+    fprintf(stderr,"Will only print first two dimensions to png.\n");
+    fflush(stderr);
   }
 
-  // set the plot data range
-  double blackval,whiteval;
-  if (useBlackWhite) {
-    blackval = black;
-    whiteval = white;
+  // eventually, find a smart way to project DIM dimensions down to 2
+
+  // how big is this domain?
+  //(void) update_node_group_stats(thisSG->nodes, thisSG->dim);
+  fprintf(stderr,"  node minima");
+  for (int i=0; i<2; i++) fprintf(stderr," %g",thisSG->nodes->min[i]);
+  fprintf(stderr,"\n");
+  fprintf(stderr,"  node maxima");
+  for (int i=0; i<2; i++) fprintf(stderr," %g",thisSG->nodes->max[i]);
+  fprintf(stderr,"\n");
+
+  // set build domain 10% larger (will this be enough to capture wide lines?)
+  //for (int i=0; i<2; i++) size[i] = thisSG->nodes->max[i] - thisSG->nodes->min[i];
+  size[0] = thisSG->nodes->max[xdim] - thisSG->nodes->min[xdim];
+  size[1] = thisSG->nodes->max[ydim] - thisSG->nodes->min[ydim];
+  double maxRad = thisSG->radii->max;
+  if (thisSG->radii->max < 0.0) maxRad = thisSG->radius;
+  fprintf(stderr,"  radius maximum %g\n",maxRad);
+  //for (int i=0; i<2; i++) start[i] = thisSG->nodes->min[i] - maxRad;
+  start[0] = thisSG->nodes->min[xdim] - maxRad;
+  start[1] = thisSG->nodes->min[ydim] - maxRad;
+  for (int i=0; i<2; i++) size[i] += 2.0*maxRad;
+
+  // compute reasonable bounds
+  double dx;
+  if (size[0] > size[1]) {
+    nx = res;
+    dx = size[0] / nx;
+    ny = 1 + (int)(size[1] / dx);
   } else {
-    blackval = min(data);
-    whiteval = max(data);
+    ny = res;
+    dx = size[1] / ny;
+    nx = 1 + (int)(size[0] / dx);
+  }
+  fprintf(stderr,"  cell size %g\n",dx);
+  fprintf(stderr,"  png will be %d x %d\n",nx,ny);
+
+  // sanity check on bob size
+  if (nx*(float)ny > 1.e+10 || nx > 100000 || ny > 100000) {
+    fprintf(stderr,"Are you sure you want to write a png file that large?\n");
+    fprintf(stderr,"  Hit enter to continue, control-c to quit.\n");
+    fflush(stderr);
+    char buf[2];
+    fread(&buf, sizeof(char), 1, stdin);
   }
 
-  // assemble file name
-  char filename[16];
-  sprintf(filename,"out_%05d.png",frameCount);
-  cout << "    writing " << filename << " in range " << whiteval - blackval << endl << flush;
+  // allocate space for the brick
+  float** dat = allocate_2d_array_f(nx,ny);
 
-  // temporary array to store scaled data
-  Array<double,2> scaled(data.shape());
-
-  if (plotType == 3) {
-    // illuminate only specific bands
-    //float factor = 16.5 / (whiteval-blackval);
-    //scaled = (data-blackval) * factor;
-    scaled = linearToOneBand(data);
-    scaled = scaled*255.0;
-
-  } else if (plotType == 2) {
-    // optionally scale to show even bands
-    float factor = 16.5 / (whiteval-blackval);
-    //float factor = 16.5 / 562.0;
-    scaled = (data-blackval) * factor;
-    scaled = linearToBands(scaled);
-    scaled = scaled*255.0;
-
-  } else if (plotType == 1) {
-    // optionally scale to accentuate iso-lines
-    float factor = 16.5 / (whiteval-blackval);
-    scaled = (data-blackval) * factor;
-    scaled = linearToIsolines(scaled);
-    scaled = scaled*255.0;
-
-  } else {
-    // linearly scale the result
-    float factor = 255.0 / (whiteval-blackval);
-    scaled = (data-blackval) * factor;
+  // zero out
+  for (int i=0; i<nx; i++) {
+  for (int j=0; j<ny; j++) {
+    dat[i][j] = 0;
+  }
   }
 
-  // cast the array to the proper byte format
-  Array<png_byte,2> bytes(data.shape());
-  bytes = demoteToByte(scaled);
-  scaled.free();
+  fprintf(stderr,"  computing");
+  fflush(stderr);
 
-  // call the writer
-  writePngPixels (filename,bytes,false);
-  bytes.free();
+  // then, rasterize all segments
+  int nlines = 0;
+  seg_ptr curr = thisSG->first;
+  while (curr) {
 
-  return frameCount++;
+    double rad1;
+    if (curr->r[0]) {
+      rad1 = curr->r[0]->r;
+    } else {
+      rad1 = thisSG->radius;
+    }
+    // insure that we have a positive and appropriate radius
+    if (rad1 < 0.0) rad1 = 2.0*dx;
+    rad1 /= dx;
+
+    double rad2;
+    if (curr->r[1]) {
+      rad2 = curr->r[1]->r;
+    } else {
+      rad2 = thisSG->radius;
+    }
+    // insure that we have a positive and appropriate radius
+    if (rad2 < 0.0) rad2 = 2.0*dx;
+    rad2 /= dx;
+
+    // scale the segment into grid coords
+    const double x1 = (curr->n[0]->x[xdim] - start[0]) / dx;
+    const double y1 = (curr->n[0]->x[ydim] - start[1]) / dx;
+    const double x2 = (curr->n[1]->x[xdim] - start[0]) / dx;
+    const double y2 = (curr->n[1]->x[ydim] - start[1]) / dx;
+
+    // find x,y,z range affected by this segment
+    const int imin = max((int)floor(fmin(x1-rad1, x2-rad2)) - 1, 0);
+    const int imax = min((int)ceil(fmax(x1+rad1, x2+rad2)) + 1, nx);
+    const int jmin = max((int)floor(fmin(y1-rad1, y2-rad2)) - 1, 0);
+    const int jmax = min((int)ceil(fmax(y1+rad1, y2+rad2)) + 1, ny);
+    //printf("kmax  %d %d %d\n",(int)ceil(fmax(z1+rad1, z2+rad2)), nz, kmax);
+
+    // loop over that subblock
+    for (int i=imin; i<imax; i++) {
+    for (int j=jmin; j<jmax; j++) {
+
+      // how far is this node from the segment, in voxels?
+      double thisDist = 2.0;
+
+      thisDist = min_dist_with_rad_2d (x1,y1,rad1, x2,y2,rad2, (double)i+0.5,(double)j+0.5);
+
+      // convert that distance to an unsigned char
+      // 255=inside
+      // 127=right on the boundary
+      // 0=more than 1 voxel away from surface
+      float thisVal = 0.0;
+      if (thisDist < -1.0) thisVal = 1.0;
+      else if (thisDist < 1.0) thisVal = 0.5 - 0.5*thisDist;
+
+      // only update the array if this voxel is nearer to this segment
+      //if (thisVal > dat[i][j]) dat[i][j] = thisVal;
+      // or, always accumulate
+      dat[i][j] += thisVal;
+    }
+    }
+
+    // advance
+    curr = curr->next;
+    if (++nlines%DOTPER == 1) {
+      fprintf(stderr,".");
+      fflush(stderr);
+    }
+  }
+  fprintf(stderr,"\n");
+  fflush(stderr);
+
+  // finally, write the file
+  fprintf(stderr,"  writing...\n");
+  fflush(stderr);
+
+  (void) write_png_file (ofp, nx, ny, TRUE, dat, 0.0, -1.0);
+
+  // free and clear
+  (void) free_2d_array_f (dat);
+
+  return(0);
 }
 
 
-#ifndef __WIN32__
-// write 8-bit color pixels to a PNG file
-void writePngPixels (const char* filename, const Array<png_byte,2>& pxls, const bool isrgb) {
-
-  int j;
-  png_structp png_ptr = NULL;
-  png_infop info_ptr = NULL;
-  png_bytepp row_pointers = NULL;
-
-  // we need to point into the Array data structure if we want to 
-  //   avoid making a copy of the data
-  row_pointers = (png_bytepp) malloc (pxls.rows() * sizeof (png_bytep));
-  row_pointers[0] = (png_bytep)pxls.data();
-  for (j=1; j<pxls.rows(); j++) {
-    row_pointers[j] = row_pointers[j-1] + pxls.cols();
-  }
-
-  // open the file for writing
-  FILE *fp = fopen(filename, "wb");
-  if (fp==NULL) {
-    fprintf(stderr,"Could not open output file (%s)\n",filename);
-    fflush(stderr);
-    exit(0);
-  }
-
-  // Create and initialize the png_struct with the desired error handler
-  // functions.  If you want to use the default stderr and longjump method,
-  // you can supply NULL for the last three parameters.  We also check that
-  // the library version is compatible with the one used at compile time,
-  // in case we are using dynamically linked libraries.  REQUIRED.
-  png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-
-  if (png_ptr == NULL) {
-    fclose(fp);
-    fprintf(stderr,"Could not create png struct\n");
-    fflush(stderr);
-    exit(0);
-    // silent fail
-    return;
-  }
-
-  // Allocate/initialize the image information data.  REQUIRED 
-  info_ptr = png_create_info_struct(png_ptr);
-  if (info_ptr == NULL) {
-    fclose(fp);
-    png_destroy_write_struct(&png_ptr,(png_infopp)NULL);
-    // silent fail
-    return;
-  }
-
-  // Set error handling.  REQUIRED if you aren't supplying your own
-  // error handling functions in the png_create_write_struct() call.
-  if (setjmp(png_jmpbuf(png_ptr))) {
-    // If we get here, we had a problem reading the file
-    fclose(fp);
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-    // silent fail
-    return;
-  }
-
-  // set up the output control if you are using standard C streams
-  png_init_io(png_ptr, fp);
-
-  // Set the image information here.  Width and height are up to 2^31,
-  // bit_depth is one of 1, 2, 4, 8, or 16, but valid values also depend on
-  // the color_type selected. color_type is one of PNG_COLOR_TYPE_GRAY,
-  // PNG_COLOR_TYPE_GRAY_ALPHA, PNG_COLOR_TYPE_PALETTE, PNG_COLOR_TYPE_RGB,
-  // or PNG_COLOR_TYPE_RGB_ALPHA.  interlace is either PNG_INTERLACE_NONE or
-  // PNG_INTERLACE_ADAM7, and the compression_type and filter_type MUST
-  // currently be PNG_COMPRESSION_TYPE_BASE and PNG_FILTER_TYPE_BASE. REQUIRED
-  if (isrgb) {
-  png_set_IHDR(png_ptr, info_ptr, (png_uint_32)pxls.cols(), (png_uint_32)pxls.rows(), 8,
-    PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
-    PNG_FILTER_TYPE_BASE);
-  } else {
-  png_set_IHDR(png_ptr, info_ptr, (png_uint_32)pxls.cols(), (png_uint_32)pxls.rows(), 8,
-    PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
-    PNG_FILTER_TYPE_BASE);
-  }
-
-  // Optional gamma chunk is strongly suggested if you have any guess
-  // as to the correct gamma of the image.
-  //png_set_gAMA(png_ptr, info_ptr, 2.2);
-  //png_set_gAMA(png_ptr, info_ptr, 1.8);
-  //png_set_gAMA(png_ptr, info_ptr, 0.55555);
-  png_set_gAMA(png_ptr, info_ptr, 1.0);
-
-  // Write the file header information.  REQUIRED
-  png_write_info(png_ptr, info_ptr);
-
-  // One of the following output methods is REQUIRED
-  png_write_image(png_ptr, row_pointers);
-  //png_write_image(png_ptr, imgrgb);
-
-  // It is REQUIRED to call this to finish writing the rest of the file
-  png_write_end(png_ptr, info_ptr);
-
-  // clean up after the write, and free any memory allocated
-  png_destroy_write_struct(&png_ptr, &info_ptr);
-
-  // close and increment
-  fclose(fp);
-}
-#endif
-*/
-
+// -------------- INPUT ----------------------------------------------------
 
 /*
  * read a PNG, convert it to segments along the given isoline
  */
-int read_png(char* infile, seg_group_ptr this, double thresh) {
+int read_png (char* infile, seg_group_ptr this, double thresh) {
 
   // Image data
   int imgx, imgy;

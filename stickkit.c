@@ -106,6 +106,7 @@ extern int write_svg_using_wxSVG(FILE*, seg_group_ptr, int, char**);
 //extern seg_group_ptr readArrayFromPng (char*, double**);
 extern int read_png(char*, seg_group_ptr, double);
 extern int write_bob(FILE*, seg_group_ptr, double);
+extern int write_png(FILE*, seg_group_ptr, int);
 
 // do all the things
 int main (int argc, char **argv) {
@@ -115,6 +116,7 @@ int main (int argc, char **argv) {
   int have_input_file = FALSE;
   double dot_scale = 0.3;
   double bob_cell = 1.0;
+  int png_res = 1024;
   int zero_indexed = FALSE;
   seg_group_ptr segs;
   //seg_group_ptr segs = (SEGMENT_GROUP*) malloc (sizeof(SEGMENT_GROUP));
@@ -148,6 +150,11 @@ int main (int argc, char **argv) {
         }
       } else if (strncmp(argv[i], "-png", 4) == 0) {
         out_format = png;
+        if (argc > i+1) {
+          if (!isalpha(argv[i+1][1])) {
+            png_res = atoi(argv[++i]);
+          }
+        }
       } else if (strncmp(argv[i], "-bob", 4) == 0) {
         out_format = bob;
         if (argc > i+1) {
@@ -340,7 +347,7 @@ int main (int argc, char **argv) {
         (void) read_png (infile, segs, 0.5);
       } else {
         fprintf (stderr,"ERROR: input file format (%s) is not",extension);
-        fprintf (stderr," supported yet.\nSupported file types: seg,rad\n");
+        fprintf (stderr," supported yet.\nSupported file types: seg,rad,png\n");
         fprintf (stderr,"Exiting\n");
         exit(0);
       }
@@ -349,9 +356,7 @@ int main (int argc, char **argv) {
     } else if (action[act].type == sk_write) {
 
       fprintf (stderr,"write\n");
-      if (out_format == seg) {
-        (void) write_seg (outptr, segs, argc, argv);
-      } else if (out_format == svg) {
+      if (out_format == svg) {
         (void) write_svg (outptr, segs, argc, argv);
       } else if (out_format == vtk) {
         (void) write_vtk (outptr, segs);
@@ -361,8 +366,10 @@ int main (int argc, char **argv) {
         (void) write_dots (outptr, segs, dot_scale);
       } else if (out_format == bob) {
         (void) write_bob (outptr, segs, bob_cell);
-        //(void) write_dots (outptr, segs, 0.006818);
-        //(void) write_dots (outptr, segs, 0.003409);
+      } else if (out_format == png) {
+        (void) write_png (outptr, segs, png_res);
+      } else {
+        (void) write_seg (outptr, segs, argc, argv);
       }
 
     // remove nodes closer than a threshold distance
@@ -4704,7 +4711,7 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -vtk        write a VTK- and mayavi-readable file",
      " ",
-     "   -png        write a PNG image file",
+     "   -png res    write a PNG image file with given maximum resolution",
      " ",
      "   -bob dx     write a 3D brick-of-bytes with cell size dx",
      " ",
@@ -4752,7 +4759,7 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -help       returns this help information",
      " ",
-     "The input file should be in .seg or .rad format",
+     "The input file should be in .seg, .rad, or .png format",
      " ",
      "Operations are done in the order that they appear on the command-",
      "line, so make sure to list your input file first!",
