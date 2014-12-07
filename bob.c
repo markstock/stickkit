@@ -241,7 +241,10 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   // set build domain 10% larger (will this be enough to capture wide lines?)
   for (int i=0; i<3; i++) size[i] = thisSG->nodes->max[i] - thisSG->nodes->min[i];
   const double maxSize = fmax(fmax(size[0],size[1]),size[2]);
-  const double maxRad = thisSG->radii->max + 2.0*dx;
+  double maxRad = thisSG->radii->max;
+  if (maxRad < 0.0) maxRad = thisSG->radius;
+  if (maxRad < 0.0) maxRad = maxSize / 100.0;
+  maxRad += 2.0*dx;
   for (int i=0; i<3; i++) start[i] = thisSG->nodes->min[i] - maxRad;
   for (int i=0; i<3; i++) size[i] += 2.0*maxRad;
 

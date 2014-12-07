@@ -169,7 +169,8 @@ typedef enum action_type {
   scale,	// scale all nodes by x,y,z
   rscale,	// scale all radii by either value 1, or linearly between values 1 and 2
   split,	// split all segments along the longest axis, write both to .rad files
-  prune		// clip segments within a distance from a tip
+  prune,	// clip segments within a distance from a tip
+  globalradius 	// set the global radius
   //resample,	// resample a strand to a fixed segment length
   //smooth,	// nudge nodes to smooth the curve
 } ACTION_NAME;

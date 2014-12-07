@@ -208,6 +208,14 @@ int main (int argc, char **argv) {
         } else {
           // if it wasn't an int, or it was 0, just don't prune
         }
+      } else if (strncmp(argv[i], "-gr", 3) == 0) {
+        (void) allocate_action (&action[nactions], globalradius);
+        if (isalpha(argv[i+1][1])) {
+          action[nactions].darg[0] = 1.;
+        } else {
+          action[nactions].darg[0] = atof(argv[++i]);
+        }
+        nactions++;
       } else if (strncmp(argv[i], "-treeradius", 4) == 0) {
         (void) allocate_action (&action[nactions], treeradius);
         if (isalpha(argv[i+1][1])) {
@@ -445,6 +453,12 @@ int main (int argc, char **argv) {
       fprintf (stderr,"roughen\n");
       (void) roughen_nodes (segs->nodes, segs->dim, action[act].darg[0]);
 
+    // set the global radius
+    } else if (action[act].type == globalradius) {
+
+      fprintf (stderr,"global radius set to %g\n", action[act].darg[0]);
+      segs->radius = action[act].darg[0];
+
     // set radii according to principle of constant stress
     } else if (action[act].type == treeradius) {
 
@@ -609,6 +623,11 @@ void allocate_action (ACTION *action, ACTION_NAME type) {
     action->nc = 0;
     action->ni = 1;
     action->nd = 0;
+  } else if (type == globalradius) {
+    // need a vector
+    action->nc = 0;
+    action->ni = 0;
+    action->nd = 1;
   } else if (type == none) {
     // no operation!
     action->nc = 0;
@@ -616,6 +635,7 @@ void allocate_action (ACTION *action, ACTION_NAME type) {
     action->nd = 0;
   } else {
     fprintf (stderr,"ERROR (allocate_action): not supposed to get here.\n");
+    fprintf (stderr,"Did you forget to edit allocate_action for the new operation?.\n");
     fprintf (stderr,"Quitting.\n");
     exit(0);
   }
@@ -4748,6 +4768,8 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -rscale s   scale all radii by the given factor",
      "   -rscale smin smax   scale all radii linearly to the given range",
+     " ",
+     "   -gr [rad]   sets global radius to rad, overwrites old radius; default=1",
      " ",
      "   -info       dump x,y,z,r min/max and other information",
      " ",
