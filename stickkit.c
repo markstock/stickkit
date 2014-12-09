@@ -107,6 +107,7 @@ extern int write_svg_using_wxSVG(FILE*, seg_group_ptr, int, char**);
 extern int read_png(char*, seg_group_ptr, double);
 extern int write_bob(FILE*, seg_group_ptr, double);
 extern int write_png(FILE*, seg_group_ptr, int);
+extern int read_bob (char*, seg_group_ptr);
 
 // do all the things
 int main (int argc, char **argv) {
@@ -351,6 +352,8 @@ int main (int argc, char **argv) {
         (void) read_seg (infile, segs, zero_indexed);
       } else if (strncmp(extension, "rad", 3) == 0) {
         (void) read_rad (infile, segs);
+      } else if (strncmp(extension, "bob", 3) == 0) {
+        (void) read_bob (infile, segs);
       } else if (strncmp(extension, "png", 3) == 0) {
         (void) read_png (infile, segs, 0.5);
       } else {
@@ -4781,7 +4784,7 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -help       returns this help information",
      " ",
-     "The input file should be in .seg, .rad, or .png format",
+     "The input file should be in .seg, .rad, .bob, or .png format",
      " ",
      "Operations are done in the order that they appear on the command-",
      "line, so make sure to list your input file first!",

@@ -117,6 +117,61 @@ int free_3d_array_b(unsigned char*** array, int nx, int ny, int nz){
    return(0);
 }
 
+unsigned int*** allocate_3d_array_i(int nx, int ny, int nz) {
+
+   // allocate an array of nx pointers, one for each plane
+   unsigned int ***array = (unsigned int ***)malloc(nx * sizeof(int **));
+
+   // are we dealing with more than 2B bytes?
+   // On x86-64 Linux, INT_MAX is 2147483647, LONG_MAX is 9223372036854775807
+   long int totBytes = (long int)nx * (long int)ny * (long int)nz * (long int)sizeof(int);
+
+   if (totBytes > (long int)INT_MAX/2) {
+      // all data is larger than 2GB, allocate it in planes
+      fprintf(stderr,"  voxel array is plane-by-plane\n");
+
+      for (int i=0; i<nx; i++) {
+         array[i] = (unsigned int **)malloc(ny * sizeof(int *));
+         array[i][0] = (unsigned int *)malloc(ny * nz * sizeof(int));
+         for (int j=1; j<ny; j++)
+            array[i][j] = array[i][0] + j * nz;
+      }
+
+   } else {
+      // we can fit it all in one malloc (it's under 2GB)
+      fprintf(stderr,"  voxel array is monolithic\n");
+
+      array[0] = (unsigned int **)malloc(nx * ny * sizeof(int *));
+      for (int i=1; i<nx; i++)
+         array[i] = array[0] + i * ny;
+
+      array[0][0] = (unsigned int *)malloc(nx * ny * nz * sizeof(int));
+      for (int i=0; i<nx; i++) {
+         if (i!=0)
+            array[i][0] = array[0][0] + i * ny * nz;
+         for (int j=1; j<ny; j++)
+            array[i][j] = array[i][0] + j * nz;
+      }
+   }
+
+   return(array);
+}
+
+int free_3d_array_i(unsigned int*** array, int nx, int ny, int nz){
+   long int totBytes = (long int)nx * (long int)ny * (long int)nz * (long int)sizeof(int);
+   if (totBytes > (long int)INT_MAX/2) {
+      for (int i=0; i<nx; i++) {
+         free(array[i][0]);
+         free(array[i]);
+      }
+   } else {
+      free(array[0][0]);
+      free(array[0]);
+   }
+   free(array);
+   return(0);
+}
+
 /*
  * Write a 3D brick of bytes
  */
@@ -394,3 +449,188 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
 
   return(0);
 }
+
+
+/*
+ * Read a 3D brick of bytes
+ */
+unsigned char*** readBobFile (char* inFileName, int* dims) {
+  unsigned char*** data = NULL;
+  int nx, ny, nz;
+  FILE *fp;
+
+  // open file for reading
+  fp = fopen(inFileName,"rb");
+  if (fp==NULL) {
+    fprintf(stderr,"Could not open input file %s\n",inFileName);
+    fprintf(stderr,"Exiting.\n");
+    exit(1);
+  }
+
+  // read the header
+  fread(&(nx),sizeof(int),1,fp);
+  fread(&(ny),sizeof(int),1,fp);
+  fread(&(nz),sizeof(int),1,fp);
+  fprintf(stderr,"  reading bob file, size %d x %d x %d\n",nx,ny,nz);
+
+  // make space for the array
+  data = allocate_3d_array_b (nx, ny, nz);
+
+  // read the file, plane-by-plane (safe)
+  for (int i=0; i<nx; i++)
+     fread(data[i][0],sizeof(char),ny*nz,fp);
+
+  // assign grid dimensions
+  dims[0] = nx;
+  dims[1] = ny;
+  dims[2] = nz;
+
+  return data;
+}
+
+// needed externs
+seg_ptr add_segment (seg_group_ptr, node_ptr, node_ptr);
+node_ptr add_node (node_group_ptr, unsigned char, double*, int);
+
+/*
+ * Convert a 3D brick of bytes into segmented "3d graph paper" based on values
+ */
+int read_bob (char* infile, seg_group_ptr thisSG) {
+
+  // read the data
+  int dims[3] = {-1, -1, -1};
+  unsigned char*** dat = readBobFile (infile, dims);
+  int nx = dims[0];
+  int ny = dims[1];
+  int nz = dims[2];
+
+  // recenter and rescale the data
+  //int center = FALSE;
+  float frac = 0.3;
+  int scale = 14;
+  int thresh = (int)(frac*256.0*scale*scale*scale);
+  int nxnew = 1+nx/scale;
+  int nynew = 1+ny/scale + 6;
+  int nznew = 1+nz/scale;
+  unsigned int*** scaled = allocate_3d_array_i (nxnew, nynew, nznew);
+  for (int i=0; i<nxnew; i++)
+  for (int j=0; j<nynew; j++)
+  for (int k=0; k<nznew; k++) {
+    scaled[i][j][k] = 0;
+  }
+  for (int i=0; i<nx; i++)
+  for (int j=0; j<ny; j++)
+  for (int k=0; k<nz; k++) {
+    scaled[i/scale][j/scale][k/scale] += (int)dat[i][j][k];
+  }
+  free_3d_array_b(dat,nx,ny,nz);
+  nx = nxnew;
+  ny = nynew;
+  nz = nznew;
+  fprintf(stderr,"  bool array is %d x %d x %d\n",nx,ny,nz);
+
+  // add a column
+  // find the start
+  int jlength = 6;
+  int jstart = -1;
+  int nxc = (nx-1)/2;
+  for (int j=ny-1; j>-1; j--) {
+    if (scaled[nxc][j][0] > thresh || scaled[nxc][j][1] > thresh) {
+      jstart = j;
+      break;
+    }
+  }
+  if (jstart > -1) {
+    for (int j=jstart; j<ny && j<jstart+jlength; j++) {
+      scaled[nxc][j][0] = 2*thresh;
+    }
+  }
+
+  // booleanize the data
+  nxnew = 1+nx;
+  nynew = 1+ny;
+  nznew = 1+nz;
+  // "node on" and "cell on"
+  unsigned char*** non = allocate_3d_array_b (nxnew, nynew, nznew);
+  unsigned char*** con = allocate_3d_array_b (nxnew+1, nynew+1, nznew+1);
+  for (int i=0; i<nxnew; i++) for (int j=0; j<nynew; j++) for (int k=0; k<nznew; k++) {
+    non[i][j][k] = FALSE;
+  }
+  for (int i=0; i<nxnew+1; i++) for (int j=0; j<nynew+1; j++) for (int k=0; k<nznew+1; k++) {
+    con[i][j][k] = FALSE;
+  }
+  int cellcnt = 0;
+  for (int i=0; i<nx; i++)
+  for (int j=0; j<ny; j++)
+  for (int k=0; k<nz; k++) {
+    if (scaled[i][j][k] > thresh) {
+      cellcnt++;
+      con[i+1][j+1][k+1] = TRUE;
+      non[i][j][k] = TRUE;
+      non[i][j][k+1] = TRUE;
+      non[i][j+1][k] = TRUE;
+      non[i][j+1][k+1] = TRUE;
+      non[i+1][j][k] = TRUE;
+      non[i+1][j][k+1] = TRUE;
+      non[i+1][j+1][k] = TRUE;
+      non[i+1][j+1][k+1] = TRUE;
+    }
+  }
+  fprintf(stderr,"  found %d cells over thresh %d\n",cellcnt,thresh);
+  free_3d_array_i(scaled,nx,ny,nz);
+  nx = nxnew;
+  ny = nynew;
+  nz = nznew;
+
+  // generate segments from boolean voxels
+  thisSG->dim = 3;
+  // box size is 1.0, default radius should be 1/(2r), where r is thickness ratio
+  thisSG->radius = 0.07;
+  node_ptr n1,n2;
+  double tempd[3],otherd[3];
+  for (int i=0; i<nx; i++) {
+    tempd[0] = (double)i;
+    for (int j=0; j<ny; j++) {
+      tempd[1] = (double)j;
+      for (int k=0; k<nz; k++) {
+        tempd[2] = (double)k;
+        if (non[i][j][k]) {
+          //fprintf(stderr,"    node at %d %d %d\n",i,j,k);
+          // make the node itself
+          n1 = add_node (thisSG->nodes, thisSG->dim, tempd, 0);
+          // connect segments
+          if (i>0) if (non[i-1][j][k]) {
+            if (con[i][j+1][k+1] || con[i][j+1][k] || con[i][j][k+1] || con[i][j][k]) {
+              for (int ii=0; ii<3; ii++) otherd[ii] = tempd[ii];
+              otherd[0] -= 1.0;
+              n2 = add_node (thisSG->nodes, thisSG->dim, otherd, 0);
+              (void) add_segment (thisSG, n1, n2);
+            }
+          }
+          if (j>0) if (non[i][j-1][k]) {
+            if (con[i+1][j][k+1] || con[i+1][j][k] || con[i][j][k+1] || con[i][j][k]) {
+              for (int ii=0; ii<3; ii++) otherd[ii] = tempd[ii];
+              otherd[1] -= 1.0;
+              n2 = add_node (thisSG->nodes, thisSG->dim, otherd, 0);
+              (void) add_segment (thisSG, n1, n2);
+            }
+          }
+          if (k>0) if (non[i][j][k-1]) {
+            if (con[i+1][j+1][k] || con[i+1][j][k] || con[i][j+1][k] || con[i][j][k]) {
+              for (int ii=0; ii<3; ii++) otherd[ii] = tempd[ii];
+              otherd[2] -= 1.0;
+              n2 = add_node (thisSG->nodes, thisSG->dim, otherd, 0);
+              (void) add_segment (thisSG, n1, n2);
+            }
+          }
+        }
+      }
+    }
+  }
+  // wow, this is getting ugly, I think I need a proper 3d array object
+  free_3d_array_b(non,nx,ny,nz);
+  free_3d_array_b(con,nx+1,ny+1,nz+1);
+
+  return (0);
+}
+
