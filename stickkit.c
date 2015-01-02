@@ -466,30 +466,29 @@ int main (int argc, char **argv) {
     } else if (action[act].type == treeradius) {
 
       fprintf (stderr,"treeradius\n");
-      // first, identify separate disconnected strands
-      i = identify_separate_strands (segs);
-      fprintf (stderr,"  found %d separate strands\n",i);
-      // then, find the root node of each strand
-      i = find_root_of_each_strand (segs, &action[act]);
-      fprintf (stderr,"  found %d strand roots\n",i);
-      // finally, set the radii
-      (void) set_seg_flags (segs, FALSE);
-      i = 1;
-      while (i > 0) {
-        if (segs->dim == 2) {
+      if (segs->dim == 3) {
+        // first, identify separate disconnected strands
+        i = identify_separate_strands (segs);
+        fprintf (stderr,"  found %d separate strands\n",i);
+        // then, find the root node of each strand
+        i = find_root_of_each_strand (segs, &action[act]);
+        fprintf (stderr,"  found %d strand roots\n",i);
+        // finally, set the radii
+        (void) set_seg_flags (segs, FALSE);
+        i = 1;
+        while (i > 0) {
           //i = set_treelike_radii_2d (segs, &action[act]);
-        } else if (segs->dim == 3) {
           i = set_treelike_radii_3d (segs, &action[act]);
-        } else {
-          fprintf (stderr,"  Error: treeradius cannot work on systems with");
-          fprintf (stderr," %d dimensions\n",segs->dim);
-          fprintf (stderr,"  works on dim 2 and 3\n");
-          fprintf (stderr,"  skipping this step\n");
-          i = 0;
+          fprintf (stderr,".");
         }
-        fprintf (stderr,".");
+        fprintf (stderr,"\n");
+
+      } else {
+        fprintf (stderr,"  Error: treeradius cannot work on systems with");
+        fprintf (stderr," %d dimensions\n",segs->dim);
+        fprintf (stderr,"  works on dim 2 and 3\n");
+        fprintf (stderr,"  skipping this step\n");
       }
-      fprintf (stderr,"\n");
 
     // remove nodes closer than a threshold distance
     } else if (action[act].type == translate) {
@@ -2003,21 +2002,20 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
   node_ptr rootnode,tipnode;
 
   // allocate space for a moment on each node
-  moment = (double**) malloc ((int)thisSG->nodes->num * sizeof(double*));
-  for (i=0; i<thisSG->nodes->num; i++)
+  int np1 = thisSG->nodes->num+1;
+  moment = (double**) malloc ((int)np1 * sizeof(double*));
+  for (i=0; i<np1; i++)
     moment[i] = (double*) malloc ((int)thisSG->dim * sizeof(double));
-  force = (double**) malloc ((int)thisSG->nodes->num * sizeof(double*));
-  for (i=0; i<thisSG->nodes->num; i++)
+  force = (double**) malloc ((int)np1 * sizeof(double*));
+  for (i=0; i<np1; i++)
     force[i] = (double*) malloc ((int)thisSG->dim * sizeof(double));
 
-  // zero those moments
-  for (i=0; i<thisSG->nodes->num; i++) {
-    moment[i][0] = 0.;
-    moment[i][1] = 0.;
-    moment[i][2] = 0.;
-    force[i][0] = 0.;
-    force[i][1] = 0.;
-    force[i][2] = 0.;
+  // zero those moments (go to n+1 because of 1-indexing)
+  for (i=0; i<np1; i++) {
+    for (j=0; j<thisSG->dim; j++) {
+      moment[i][j] = 0.;
+      force[i][j] = 0.;
+    }
   }
 
   // check all elements
@@ -2045,7 +2043,7 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
         rad = 2.*sqrt(lensq*armsq)/stress;
         curr->r[0] = add_radius (thisSG->radii, rad, 0);
         curr->r[1] = add_radius (thisSG->radii, rad, 0);
-        fprintf (stderr,"  independent, has radius %g\n",rad);
+        //fprintf (stderr,"  independent, has radius %g\n",rad);
 
       // it's an end, do it
       } else if (n0conn == 1 || n1conn == 1) {
@@ -2073,7 +2071,7 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
         rad = 2.*sqrt(lensq*armsq)/stress;
         curr->r[0] = add_radius (thisSG->radii, rad, 0);
         curr->r[1] = add_radius (thisSG->radii, rad, 0);
-        fprintf (stderr,"len %g, arm\n",sqrt(lensq),sqrt(armsq));
+        fprintf (stderr,"len %g, arm %g\n",sqrt(lensq),sqrt(armsq));
         fprintf (stderr,"  tip has radius %g\n",rad);
 
         // set the force and moment for this tip segment
@@ -2082,9 +2080,12 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
         fprintf (stderr,"  force %g\n",force[rindex][2]);
         fprintf (stderr,"  moment %g %g\n",moment[rindex][0],moment[rindex][1]);
 
+        // carry this force all the way down to root?
+
       // it's not an end, check all connected segs for doneness
       } else {
 
+        // UNFINISHED!!!
         // only continue if ONE connected adjacent seg is not done
 
         // define our directions
@@ -4757,8 +4758,9 @@ int Usage(char progname[MAXSTR],int status) {
      "               set all radii to mimic woody plant growth,",
      "               relative strength is s * 10^6 * E / (rho * g * l),",
      "               next two entries define which nodes are roots:",
-     "               'x 0' means whichever node is closest to the x=0 plane;",
-     "               default= 1.0, x, 0.0",
+     "               '0 5.0' means whichever node is closest to the x=5 plane,",
+     "               '2 0' means whichever node is closest to the z=0 plane;",
+     "               default= 1.0 0 0.0",
      " ",
      "   -translate [x [y [z]]]",
      "               translate structure by vector x,y,z; default= 0,0,0",
