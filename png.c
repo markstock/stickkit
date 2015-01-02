@@ -260,9 +260,11 @@ double min_dist_with_rad_2d (double vx, double vy, double vr,
     tadj = t + (pt/dl) * (wr-vr) / sqrt(l2 - pow(wr-vr,2));
   }
   // Beyond the 'v' end of the segment
-  if (tadj < 0.0) return dvp - vr;
+  //if (tadj < 0.0) return dvp - vr;
+  if (tadj < 0.0) return dvp;
   // Beyond the 'w' end of the segment
-  else if (tadj > 1.0) return dwp - wr;
+  //else if (tadj > 1.0) return dwp - wr;
+  else if (tadj > 1.0) return dwp;
   // Projection falls on the segment
   const double jx = vx + tadj * (wx - vx);
   const double jy = vy + tadj * (wy - vy);
@@ -274,15 +276,19 @@ double min_dist_with_rad_2d (double vx, double vy, double vr,
 int write_png (FILE* ofp, seg_group_ptr thisSG, int res) {
 
   int xdim = 0;
-  int ydim = 2;
+  int ydim = thisSG->dim-1;
   int nx,ny;
   double start[2];
   double size[2];
 
   // wrong if only 2D
   if (thisSG->dim > 2) {
-    fprintf(stderr,"Will only print first two dimensions to png.\n");
+    fprintf(stderr,"Will only print first and last dimensions to png.\n");
     fflush(stderr);
+  } else if (thisSG->dim == 1) {
+    fprintf(stderr,"How did you get a 1D .seg file?\n");
+    fflush(stderr);
+    return(1);
   }
 
   // eventually, find a smart way to project DIM dimensions down to 2
@@ -290,10 +296,10 @@ int write_png (FILE* ofp, seg_group_ptr thisSG, int res) {
   // how big is this domain?
   //(void) update_node_group_stats(thisSG->nodes, thisSG->dim);
   fprintf(stderr,"  node minima");
-  for (int i=0; i<2; i++) fprintf(stderr," %g",thisSG->nodes->min[i]);
+  for (int i=0; i<thisSG->dim; i++) fprintf(stderr," %g",thisSG->nodes->min[i]);
   fprintf(stderr,"\n");
   fprintf(stderr,"  node maxima");
-  for (int i=0; i<2; i++) fprintf(stderr," %g",thisSG->nodes->max[i]);
+  for (int i=0; i<thisSG->dim; i++) fprintf(stderr," %g",thisSG->nodes->max[i]);
   fprintf(stderr,"\n");
 
   // set build domain 10% larger (will this be enough to capture wide lines?)
