@@ -531,18 +531,20 @@ int read_bob (char* infile, seg_group_ptr thisSG) {
 
   // add a column
   // find the start
-  int jlength = 6;
-  int jstart = -1;
-  int nxc = (nx-1)/2;
-  for (int j=ny-1; j>-1; j--) {
-    if (scaled[nxc][j][0] > thresh || scaled[nxc][j][1] > thresh) {
-      jstart = j;
-      break;
+  if (FALSE) {
+    int jlength = 6;
+    int jstart = -1;
+    int nxc = (nx-1)/2;
+    for (int j=ny-1; j>-1; j--) {
+      if (scaled[nxc][j][0] > thresh || scaled[nxc][j][1] > thresh) {
+        jstart = j;
+        break;
+      }
     }
-  }
-  if (jstart > -1) {
-    for (int j=jstart; j<ny && j<jstart+jlength; j++) {
-      scaled[nxc][j][0] = 2*thresh;
+    if (jstart > -1) {
+      for (int j=jstart; j<ny && j<jstart+jlength; j++) {
+        scaled[nxc][j][0] = 2*thresh;
+      }
     }
   }
 
