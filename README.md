@@ -1,6 +1,6 @@
 # Stickkit
 
-Copyright 2007,08,13,14 Mark J. Stock mstock@umich.edu
+Copyright 2007,08,13-15,17 Mark J. Stock mstock@umich.edu
 
 ## Introduction
 

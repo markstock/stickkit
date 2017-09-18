@@ -1,7 +1,7 @@
 /*
  * stickkit.c
  *
- * copyright 2007,08,13,14 Mark J. Stock mstock@umich.edu
+ * copyright 2007,08,13-15,17 Mark J. Stock mstock@umich.edu
  *
  * a program to read, manipulate, and write string, segmented, or
  * graph-like data in fewer than 16 space dimensions
