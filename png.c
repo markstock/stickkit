@@ -260,11 +260,11 @@ double min_dist_with_rad_2d (double vx, double vy, double vr,
     tadj = t + (pt/dl) * (wr-vr) / sqrt(l2 - pow(wr-vr,2));
   }
   // Beyond the 'v' end of the segment
-  //if (tadj < 0.0) return dvp - vr;
-  if (tadj < 0.0) return dvp;
+  if (tadj < 0.0) return dvp - vr;
+  //if (tadj < 0.0) return dvp;
   // Beyond the 'w' end of the segment
-  //else if (tadj > 1.0) return dwp - wr;
-  else if (tadj > 1.0) return dwp;
+  else if (tadj > 1.0) return dwp - wr;
+  //else if (tadj > 1.0) return dwp;
   // Projection falls on the segment
   const double jx = vx + tadj * (wx - vx);
   const double jy = vy + tadj * (wy - vy);
