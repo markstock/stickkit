@@ -64,6 +64,7 @@ int split_and_write_rad (seg_group_ptr, char*);
 int split_into_two_seg_groups (node_group_ptr, int, double, seg_group_ptr, seg_group_ptr);
 // input/output
 int read_seg (char*, seg_group_ptr, int);
+int read_obj (char*, seg_group_ptr, int);
 int read_rad (char*, seg_group_ptr);
 int read_radiance_floats (FILE*, double*);
 seg_ptr add_segment (seg_group_ptr, node_ptr, node_ptr);
@@ -350,6 +351,8 @@ int main (int argc, char **argv) {
       // read the input file
       if (strncmp(extension, "seg", 3) == 0) {
         (void) read_seg (infile, segs, zero_indexed);
+      } else if (strncmp(extension, "obj", 3) == 0) {
+        (void) read_obj (infile, segs, zero_indexed);
       } else if (strncmp(extension, "rad", 3) == 0) {
         (void) read_rad (infile, segs);
       } else if (strncmp(extension, "bob", 3) == 0) {
@@ -358,7 +361,7 @@ int main (int argc, char **argv) {
         (void) read_png (infile, segs, 0.5);
       } else {
         fprintf (stderr,"ERROR: input file format (%s) is not",extension);
-        fprintf (stderr," supported yet.\nSupported file types: seg,rad,png\n");
+        fprintf (stderr," supported yet.\nSupported file types: seg,obj,rad,png\n");
         fprintf (stderr,"Exiting\n");
         exit(0);
       }
@@ -2720,6 +2723,232 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
 
 
 /*
+ * Read a .obj file (and keep the edges)
+ */
+int read_obj (char *infile, seg_group_ptr thisSG, int zero_indexed) {
+
+  int i,j,k,nnode,nlines;
+  int n0index,n1index,n2index;
+  char onechar,anotherchar;
+  char twochar[2],sbuf[128],newval[32],sub[10];
+  double tempd[MAXDIM];
+  node_ptr newnode,newnode0,newnode1;
+  node_ptr *thenodes;
+  seg_ptr newseg;
+  FILE *infp;
+  long int fpos;
+
+  // before proceeding, prepare the seg_group struct
+  thisSG->dim = 3;		// provide a default
+  thisSG->radius = -1.;		// negative == "unset"
+  thisSG->num = 0;		// gotta start somewhere
+
+  // first, scan the file and record the dimensionality and bounds =======
+
+  // open the file for reading
+  infp = fopen (infile,"r");
+  if (infp==NULL) {
+    fprintf (stderr,"  Could not open input file %s\n",infile);
+    fprintf (stderr,"  Exiting\n");
+    exit (0);
+  }
+  fprintf (stderr,"  Opening file %s\n",infile);
+  fprintf (stderr,"  Prescanning");
+  fflush (stderr);
+
+  // read the first character after the newline
+  nnode = 0;
+  nlines = 0;
+  while (fread (&onechar,sizeof(char),1,infp) == 1) {
+
+    if (onechar == 'v') {
+      // this is some form of vertex information
+      fread (&anotherchar,sizeof(char),1,infp);
+
+      if (isspace (anotherchar)) {
+        // this is an actual vertex
+        // count it
+        nnode++;
+      } else {
+        // skip it
+      }
+
+    } else {
+      // if its not identifiable, skip it
+    }
+
+    // finish reading the line and the CR
+    fscanf (infp,"%[^\n]",sbuf);	// read comment beyond '#'
+    fscanf (infp,"%[\n]",twochar);	// read newline
+
+    if (++nlines%DOTPER == 1) {
+      fprintf(stderr,".");
+      fflush(stderr);
+    }
+  }
+
+  // close it
+  fclose(infp);
+  fprintf(stderr,"%d nodes",nnode);
+  fprintf(stderr,"\n");
+  fflush(stderr);
+
+  // malloc space for an array of pointers
+  thenodes = (node_ptr*) malloc ((nnode+1) * sizeof(node_ptr));
+
+  // then, reopen the file and read in the vertexes and segments =========
+
+  // open the file for reading
+  infp = fopen (infile,"r");
+  if (infp==NULL) {
+    fprintf (stderr,"  Could not open input file %s\n",infile);
+    fprintf (stderr,"  Exiting\n");
+    exit (0);
+  }
+  //fprintf (stderr,"  Opening file %s\n",infile);
+  fprintf (stderr,"  Reading");
+  fflush (stderr);
+
+  // read the first character after the newline
+  nnode = 0;
+  nlines = 0;
+  while (fread (&onechar,sizeof(char),1,infp) == 1) {
+
+    // split on first character
+    if (onechar == '#') {
+      // read a comment line
+
+    } else if (onechar == 'v') {
+      // this is some form of vertex information
+      fread (&anotherchar,sizeof(char),1,infp);
+
+      if (isspace(anotherchar)) {
+        // this is an actual vertex
+        //fprintf (stderr,"adding node\n"); fflush (stderr);
+        for (i=0; i<thisSG->dim; i++) {
+          fpos = ftell (infp);
+          fscanf (infp,"%s",newval);
+          // check this value for \n or non-math character!
+          //fprintf (stderr,"    (%s)\n",newval); fflush (stderr);
+          if (newval[0] < 43 || newval[0] == 47 | newval[0] > 57) {
+            // if it is, fill the rest of the data with zeros
+            for (j=i; j<thisSG->dim; j++) tempd[j] = 0.;
+            // rewind the file
+            fseek (infp, fpos, SEEK_SET);
+            // and break out of this loop
+            break;
+          } else {
+            tempd[i] = atof(newval);
+          }
+        }
+        newnode = add_node (thisSG->nodes, thisSG->dim, tempd, 0);
+        //for (i=0; i<thisSG->dim; i++) newnode->x[i] = tempd[i];
+        //fprintf (stderr," node index %ld\n",newnode->index); fflush (stderr);
+        //fprintf (stderr," node loc %g %g\n",newnode->x[0],newnode->x[1]); fflush (stderr);
+        // put it in the list
+        //thenodes[thisSG->nodes->num] = newnode;
+        thenodes[++nnode] = newnode;
+
+      } else {
+        // skip it
+      }
+
+    } else if (onechar == 'f') {
+      // this is a segment
+      //fprintf (stderr,"adding segment\n"); fflush (stderr);
+      n0index = -1;
+      n1index = -1;
+      n2index = -1;
+
+      // read the first set of indices
+      fscanf (infp,"%s",newval);
+
+      // look for a slash
+      for (i=0; i<strlen(newval); i++)
+        if (newval[i] == '/' || newval[i] == '\0') break;
+      strncpy(sub,newval,i);
+      sub[i] = '\0';
+      if (i>0) n0index = atoi(sub);
+      //fprintf (stderr,"i %d, sub (%s) (%d)\n",i,sub,atoi(sub));
+
+      // read the second set of indices
+      fscanf (infp,"%s",newval);
+
+      // look for a slash
+      for (i=0; i<strlen(newval); i++)
+        if (newval[i] == '/' || newval[i] == '\0') break;
+      strncpy(sub,newval,i);
+      sub[i] = '\0';
+      n1index = atoi(sub);
+      //fprintf (stderr,"i %d, sub (%s) (%d)\n",i,sub,atoi(sub));
+
+      // and the third set of indices
+      fscanf (infp,"%s",newval);
+
+      // look for a slash
+      for (i=0; i<strlen(newval); i++)
+        if (newval[i] == '/' || newval[i] == '\0') break;
+      strncpy(sub,newval,i);
+      sub[i] = '\0';
+      n2index = atoi(sub);
+      //fprintf (stderr,"i %d, sub (%s) (%d)\n",i,sub,atoi(sub));
+
+      //fprintf (stderr,"  indices %d %d %d %d %d %d\n",n0index,n0rad,n0tan,n1index,n1rad,n1tan); fflush (stderr);
+
+      // check for errors
+      if (zero_indexed) {
+        if (n0index > -1) n0index++;
+        if (n1index > -1) n1index++;
+        if (n2index > -1) n2index++;
+      }
+
+      if (n0index < 1 || n1index < 1 || n2index < 1) {
+        fprintf (stderr,"ERROR (read_obj): segment->node indicies incorrect\n");
+        fprintf (stderr,"  indices=%d, %d, %d\n",n0index,n1index,n2index);
+        fprintf (stderr,"  Quitting.\n");
+        exit(1);
+      }
+      if (n0index > nnode || n1index > nnode || n2index > nnode) {
+        fprintf (stderr,"ERROR (read_obj): segment->node indicies incorrect\n");
+        fprintf (stderr,"  indices=%d, %d, %d\n",n0index,n1index,n2index);
+        fprintf (stderr,"  only %d nodes have been defined so far\n",nnode);
+        fprintf (stderr,"  Quitting.\n");
+        exit(1);
+      }
+
+      // create the segment
+      newseg = add_segment (thisSG, thenodes[n0index], thenodes[n1index]);
+      newseg = add_segment (thisSG, thenodes[n1index], thenodes[n2index]);
+      newseg = add_segment (thisSG, thenodes[n2index], thenodes[n0index]);
+
+    } else {
+      // if its not identifiable, skip it
+    }
+
+    // and finish reading
+    fscanf (infp,"%[^\n]",sbuf);	// read line up to newline
+    fscanf (infp,"%[\n]",twochar);	// read newline
+
+    if (++nlines%DOTPER == 1) {
+      fprintf(stderr,".");
+      fflush(stderr);
+    }
+  }
+
+  // close it
+  fclose (infp);
+  fprintf (stderr,"%d segments\n",thisSG->num);
+  fflush (stderr);
+
+  // remove the temporary array
+  free (thenodes);
+
+  // if things bomb, send back a nonzero
+  return (0);
+}
+
+
+/*
  * Read a .rad file (detects Radiance cones and cylinders only)
  *
  * For now, naive read: will maintain copies of nodes
@@ -2929,6 +3158,19 @@ seg_ptr add_segment (seg_group_ptr thisSG, node_ptr n0, node_ptr n1) {
   int i = 0;
   seg_ptr newseg = NULL;
   seg_ptr *newconnlist;
+
+  // does this segment already exist?
+  // check neibs of first node for second node
+  int exists = FALSE;
+  for (unsigned int i=0; i<n0->numconn0; ++i) {
+    if (n0->conn0[i]->n[1] == n1) exists = TRUE;
+  }
+  for (unsigned int i=0; i<n0->numconn1; ++i) {
+    if (n0->conn1[i]->n[0] == n1) exists = TRUE;
+  }
+  // we don't need to check the other
+
+  if (exists) return NULL;
 
   // get memory for the node
   newseg = (SEGMENT*) malloc (sizeof(SEGMENT));
@@ -4786,7 +5028,7 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -help       returns this help information",
      " ",
-     "The input file should be in .seg, .rad, .bob, or .png format",
+     "The input file should be in seg, obj, rad, bob, or png format",
      " ",
      "Operations are done in the order that they appear on the command-",
      "line, so make sure to list your input file first!",
