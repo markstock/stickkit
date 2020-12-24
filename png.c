@@ -276,7 +276,8 @@ double min_dist_with_rad_2d (double vx, double vy, double vr,
 int write_png (FILE* ofp, seg_group_ptr thisSG, int res) {
 
   int xdim = 0;
-  int ydim = thisSG->dim-1;
+  //int ydim = thisSG->dim-1;
+  int ydim = 1;
   int nx,ny;
   double start[2];
   double size[2];
