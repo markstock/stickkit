@@ -221,8 +221,8 @@ double minimum_distance(double vx, double vy, double vz,
   return sqrt( pow(jx-px,2) + pow(jy-py,2) + pow(jz-pz,2) );
 }
 
-double min_dist_with_rad(double vx, double vy, double vz, double vr,
-                         double wx, double wy, double wz, double wr,
+double min_dist_with_rad(double vx, double vy, double vz, double vr, int vcap,
+                         double wx, double wy, double wz, double wr, int wcap,
                          double px, double py, double pz) {
   // Return minimum distance between fat line segment vw and point p
   // i.e. |w-v|^2 -  avoid a sqrt
@@ -255,9 +255,22 @@ double min_dist_with_rad(double vx, double vy, double vz, double vr,
   //fprintf(stdout,"dvp %g\n",dvp);
   //fprintf(stdout,"dwp %g\n",dwp);
   // Beyond the 'v' end of the segment
-  if (t < 0.0) return dvp - vr;
+  if (t < 0.0) {
+    if (vcap) {
+      // this should be modified to account for test points outside of the radius of the tube
+      return -t*dl;	// this assumes flat endcaps
+    } else {
+      // this could be modified to cap if t<-1 to prevent poking out from under the actual cap
+      return dvp - vr;	// this assumes spherical endcaps
+    }
   // Beyond the 'w' end of the segment
-  else if (t > 1.0) return dwp - wr;
+  } else if (t > 1.0) {
+    if (wcap) {
+      return (t-1.0)*dl;// this assumes flat endcaps
+    } else {
+      return dwp - wr;	// this assumes spherical endcaps
+    }
+  }
   // Projection falls on the segment
   const double jx = vx + t * (wx - vx);
   const double jy = vy + t * (wy - vy);
@@ -271,6 +284,8 @@ double min_dist_with_rad(double vx, double vy, double vz, double vr,
 // rasterize all segments to a regular 3D grid of bytes
 //
 int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
+
+  const int flatEndCaps = TRUE;
 
   int nx, ny, nz;
   double start[3];
@@ -334,6 +349,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   fprintf(stderr,"  computing");
   fflush(stderr);
 
+/*
   if (FALSE) {
     // run some tests
     double val = min_dist_with_rad(1.0,0.0,0.0,1.0, 3.0,0.0,0.0,2.0, 1.0,2.0,0.0);
@@ -351,6 +367,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
     fprintf(stdout,"dist to 3,2 is %g\n",val);
     exit(0);
   }
+*/
 
   // then, rasterize all segments
   int nlines = 0;
@@ -376,6 +393,11 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
     // insure that we have a positive and appropriate radius
     if (rad2 < 0.0) rad2 = 2.0*dx;
     rad2 /= dx;
+
+    // is this segment at the end of a strand? is it an endcap?
+    const int cap1 = (flatEndCaps && curr->n[0]->numconn0 + curr->n[0]->numconn1 < 2 ? TRUE : FALSE);
+    const int cap2 = (flatEndCaps && curr->n[1]->numconn0 + curr->n[1]->numconn1 < 2 ? TRUE : FALSE);
+    //fprintf(stderr,"end caps?  %d %d\n", cap1, cap2);
 
     // scale the segment into grid coords
     const double x1 = (curr->n[0]->x[0] - start[0]) / dx;
@@ -411,7 +433,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
 
       } else {
         // do it the new way, accounting for linearly-varying radius along the segment
-        thisDist = min_dist_with_rad(x1,y1,z1,rad1, x2,y2,z2,rad2, (double)i+0.5,(double)j+0.5,(double)k+0.5);
+        thisDist = min_dist_with_rad(x1,y1,z1,rad1,cap1, x2,y2,z2,rad2,cap2, (double)i+0.5,(double)j+0.5,(double)k+0.5);
       }
 
       // convert that distance to an unsigned char
