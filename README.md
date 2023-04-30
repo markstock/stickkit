@@ -13,7 +13,7 @@ Files
 
 The current version of Stickkit is 0.5. On a Linux or OSX system, build it with:
 
-    sudo yum install wxGTK-devel wxsvg-devel
+    sudo dnf install wxGTK3-devel wxsvg-devel
     git clone https://github.com/markstock/stickkit.git
     cd stickkit
     make

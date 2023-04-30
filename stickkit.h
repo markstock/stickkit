@@ -25,6 +25,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdbool.h>
+
 // user-changeable parameters
 #define BUCKET 100
 #define DOTPER 10000
@@ -32,8 +34,6 @@
 #define MAX_ACTIONS 100
 
 // necessary defines
-#define TRUE 1
-#define FALSE 0
 #define EPSILON 1.0e-6
 #define EPSILONSQRD 1.0e-12
 #define M_PI           3.14159265358979323846
@@ -66,7 +66,7 @@ typedef struct rad_group *rad_group_ptr;
 // a node
 typedef struct node {
   unsigned long int index;
-  char flag;
+  bool flag;
   double *x;
   unsigned int numconn0;
   seg_ptr *conn0;
@@ -92,7 +92,7 @@ typedef struct node_group {
 typedef struct segment {
   unsigned long int index;	// id of individual segment
   unsigned int block;		// id of disconnected block, start at 1
-  char flag;			// temporary flag
+  bool flag;			// temporary flag
   node_ptr n[2];
   rad_ptr r[2];
   tan_ptr t[2];
@@ -116,7 +116,7 @@ typedef struct seg_group {
 // a tangent vector
 typedef struct tangent {
   unsigned long int index;
-  char flag;
+  bool flag;
   double *x;
   tan_group_ptr parent;
   tan_ptr prev;
@@ -137,7 +137,7 @@ typedef struct tan_group {
 // a radius
 typedef struct radius {
   unsigned long int index;
-  char flag;
+  bool flag;
   double r;
   rad_group_ptr parent;
   rad_ptr prev;

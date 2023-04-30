@@ -85,9 +85,9 @@ int write_dots_1 (node_group_ptr, node_group_ptr, int, double *);
 int write_dots_2 (seg_group_ptr, node_group_ptr, int, double *);
 int write_dots_3 (FILE *, node_group_ptr, int);
 // utility
-int set_seg_flags (seg_group_ptr, int);
-int set_node_flags (node_group_ptr, int);
-int set_radius_flags (rad_group_ptr, int);
+int set_seg_flags (seg_group_ptr, const bool);
+int set_node_flags (node_group_ptr, const bool);
+int set_radius_flags (rad_group_ptr, const bool);
 void perturb_gaussian (double*, double, int);
 double seg_length (seg_ptr, int);
 double seg_length_sqrd (seg_ptr, int);
@@ -115,11 +115,11 @@ int main (int argc, char **argv) {
 
   // main non-global definitions
   int i,j,act;
-  int have_input_file = FALSE;
+  bool have_input_file = false;
   double dot_scale = 0.3;
   double bob_cell = 1.0;
   int png_res = 1024;
-  int zero_indexed = FALSE;
+  bool zero_indexed = false;
   seg_group_ptr segs;
   //seg_group_ptr segs = (SEGMENT_GROUP*) malloc (sizeof(SEGMENT_GROUP));
   char progname[MAXSTR],infile[MAXSTR],root[MAXSTR],extension[4];
@@ -291,7 +291,7 @@ int main (int argc, char **argv) {
         (void) allocate_action (&action[nactions], split);
         nactions++;
       } else if (strncmp(argv[i], "-zeroindex", 2) == 0) {
-        zero_indexed = TRUE;
+        zero_indexed = true;
       } else if (strncmp(argv[i], "-info", 2) == 0) {
         (void) allocate_action (&action[nactions], info);
         nactions++;
@@ -310,7 +310,7 @@ int main (int argc, char **argv) {
     } else {
       // arg does not start with "-" must be an input filename!
       //(void) strcpy (infile,argv[i]);
-      have_input_file = TRUE;
+      have_input_file = true;
       (void) allocate_action (&action[nactions], sk_read);
       (void) strcpy (action[nactions].carg[0], argv[i]);
       nactions++;
@@ -395,7 +395,7 @@ int main (int argc, char **argv) {
       // do the merge, interate until all are done
       i = 1;
       while (i > 0) {
-        (void) set_node_flags (segs->nodes, FALSE);
+        (void) set_node_flags (segs->nodes, false);
         i = merge_close_nodes (segs->nodes, segs->dim,
                                   pow(action[act].darg[0],2));
         fprintf (stderr,"  performed %d merges\n",i);
@@ -413,15 +413,15 @@ int main (int argc, char **argv) {
                segs->num,segs->nodes->num);
 
       // should we do the normalized version? if thresh is negative
-      if (action[act].darg[0] > 0.) j = FALSE;
-      else j = TRUE;
+      if (action[act].darg[0] > 0.) j = false;
+      else j = true;
       //fprintf (stderr,"  normalization is %d\n",j);
 
       // do the splits, interate until all are done
       i = 1;
       while (i > 0) {
-        (void) set_seg_flags (segs, FALSE);
-        i = split_long_segs (segs, pow(action[act].darg[0],2), TRUE, j);
+        (void) set_seg_flags (segs, false);
+        i = split_long_segs (segs, pow(action[act].darg[0],2), true, j);
         fprintf (stderr,"  performed %d splits\n",i);
       }
       // reset the counters and bounds
@@ -437,15 +437,15 @@ int main (int argc, char **argv) {
                segs->num,segs->nodes->num);
 
       // should we do the normalized version? if thresh is negative
-      if (action[act].darg[0] > 0.) j = FALSE;
-      else j = TRUE;
+      if (action[act].darg[0] > 0.) j = false;
+      else j = true;
       //fprintf (stderr,"  normalization is %d\n",j);
 
       // do the splits, interate until all are done
       i = 1;
       while (i > 0) {
-        (void) set_seg_flags (segs, FALSE);
-        i = split_long_segs (segs, pow(action[act].darg[0],2), FALSE, j);
+        (void) set_seg_flags (segs, false);
+        i = split_long_segs (segs, pow(action[act].darg[0],2), false, j);
         fprintf (stderr,"  performed %d splits\n",i);
       }
       // reset the counters and bounds
@@ -477,7 +477,7 @@ int main (int argc, char **argv) {
         i = find_root_of_each_strand (segs, &action[act]);
         fprintf (stderr,"  found %d strand roots\n",i);
         // finally, set the radii
-        (void) set_seg_flags (segs, FALSE);
+        (void) set_seg_flags (segs, false);
         i = 1;
         while (i > 0) {
           //i = set_treelike_radii_2d (segs, &action[act]);
@@ -994,13 +994,13 @@ void delete_segment (node_ptr keepnode, node_ptr delnode, seg_ptr delseg,
   //   by the segment in question!
   if (delseg->n[0] == keepnode) {
     if (delseg->n[1] == delnode) {
-      keepis0 = TRUE;
+      keepis0 = true;
     } else {
       keepis0 = -1;	// bad!
     }
   } else if (delseg->n[1] == keepnode) {
     if (delseg->n[0] == delnode) {
-      keepis0 = FALSE;
+      keepis0 = false;
     } else {
       keepis0 = -1;	// bad!
     }
@@ -1020,7 +1020,7 @@ void delete_segment (node_ptr keepnode, node_ptr delnode, seg_ptr delseg,
   // throw away the index and the flag of the old node
 
   // and set the new flag to indicate that it's participated this merge
-  keepnode->flag = TRUE;
+  keepnode->flag = true;
 
   // relocate keepnode, weight by number of connections
   num_link_keep = keepnode->numconn0 + keepnode->numconn1;
@@ -1267,8 +1267,8 @@ void split_segment (seg_ptr thisSP, int dim, int use_spline) {
   thisSP->t[1] = NULL;
 
   // set the two seg flags to indicate that they've participated in a split
-  thisSP->flag = TRUE;
-  newseg->flag = TRUE;
+  thisSP->flag = true;
+  newseg->flag = true;
 
   return;
 }
@@ -1509,8 +1509,8 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
 void find_seg_tangents (seg_ptr thisSP, int dim) {
 
   int i,j;
-  int do_later0 = FALSE;
-  int do_later1 = FALSE;
+  int do_later0 = false;
+  int do_later1 = false;
   double dotp,thisrad,otherrad,radsum;
   double x[dim],dl[dim],dlnorm[dim],other[dim];
   node_ptr n0 = thisSP->n[0];
@@ -1531,7 +1531,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
 
     // if this is an end, then mirror the other tangent
     if (n0->numconn0 + n0->numconn1 == 1) {
-      do_later0 = TRUE;
+      do_later0 = true;
 
     // otherwise, use summations
     } else {
@@ -1621,7 +1621,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
 
     // if this is an end, then mirror the other tangent
     if (n1->numconn0 + n1->numconn1 == 1) {
-      do_later1 = TRUE;
+      do_later1 = true;
 
     // otherwise, use summations
     } else {
@@ -1781,7 +1781,7 @@ int identify_separate_strands (seg_group_ptr thisSG) {
   thisSG->numblock = 0;
   curr = thisSG->first;
   while (curr) {
-    curr->flag = FALSE;
+    curr->flag = false;
     curr->block = 0;
     curr = curr->next;
   }
@@ -1826,7 +1826,7 @@ int identify_connected_segments (seg_ptr thisSP, unsigned int blockid) {
   thisSP->block = blockid;
 
   // set flag
-  thisSP->flag = TRUE;
+  thisSP->flag = true;
 
   // recursively call all connected elems
   for (i=0; i<thisSP->n[0]->numconn0; i++)
@@ -1866,7 +1866,7 @@ int find_root_of_each_strand (seg_group_ptr thisSG, ACTION *args) {
   seg_ptr curr;
 
   // set appropriate flags
-  (void) set_node_flags (thisSG->nodes, FALSE);
+  (void) set_node_flags (thisSG->nodes, false);
 
   // create array for each block
   found_root = (unsigned char*) malloc ((int)(thisSG->numblock+1)*sizeof(char));
@@ -1875,7 +1875,7 @@ int find_root_of_each_strand (seg_group_ptr thisSG, ACTION *args) {
 
   // initialize those arrays
   for (i=0; i<thisSG->numblock+1; i++) {
-    found_root[i] = FALSE;
+    found_root[i] = false;
     close_dist[i] = 9.9e+9;
     close_node[i] = NULL;
   }
@@ -1891,14 +1891,14 @@ int find_root_of_each_strand (seg_group_ptr thisSG, ACTION *args) {
       if ((curr->n[0]->x[axis] - intercept)*
           (curr->n[1]->x[axis] - intercept) < 0.) {
 
-        found_root[curr->block] = TRUE;
+        found_root[curr->block] = true;
 
         // one of the two nodes will be the root
         if (fabs(curr->n[0]->x[axis] - intercept) >
             fabs(curr->n[1]->x[axis] - intercept)) {
-          curr->n[0]->flag = TRUE;
+          curr->n[0]->flag = true;
         } else {
-          curr->n[1]->flag = TRUE;
+          curr->n[1]->flag = true;
         }
         cnt++;
 
@@ -1927,7 +1927,7 @@ int find_root_of_each_strand (seg_group_ptr thisSG, ACTION *args) {
     // if there's no intersection, there's no root yet
     if (!found_root[i]) {
       if (close_node[i]) {
-        close_node[i]->flag = TRUE;
+        close_node[i]->flag = true;
         //fprintf (stderr,"seg %d closest node at %g\n",i,close_dist[i]);
         cnt++;
       } else {
@@ -1951,7 +1951,7 @@ int prune_once (seg_group_ptr thisSG) {
   seg_ptr curr;
 
   // make sure we don't just zipper delete a long strand
-  (void) set_node_flags (thisSG->nodes, FALSE);
+  (void) set_node_flags (thisSG->nodes, false);
 
   // search structures for nodes with only one connected segment
   curr = thisSG->first;
@@ -1990,7 +1990,7 @@ int prune_once (seg_group_ptr thisSG) {
  *
  * Only works for dimensions 2 and 3 (or first 3 dimensions of d>3)
  *
- * A node flag of TRUE means that that node is a root!
+ * A node flag of true means that that node is a root!
  */
 int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
 
@@ -2110,7 +2110,7 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
       }
 
       // for testing, force all segments to be done
-      curr->flag = TRUE;
+      curr->flag = true;
     }
     curr = curr->next;
   }
@@ -2185,7 +2185,7 @@ int scale_radii (rad_group_ptr thisRG, double *vec) {
   int i;
   int cnt = 0;
   rad_ptr curr;
-  static int setScaling = FALSE;
+  static int setScaling = false;
   static double c1, c2;
 
   // have we determined the scaling yet?
@@ -2206,7 +2206,7 @@ int scale_radii (rad_group_ptr thisRG, double *vec) {
     }
     //thisRG->min *= vec[0];
     //thisRG->max *= vec[0];
-    setScaling = TRUE;
+    setScaling = true;
   }
 
   // check all children
@@ -2252,7 +2252,7 @@ int split_and_write_rad (seg_group_ptr thisSG, char root[MAXSTR]) {
 
   // is this group small enough to just print?
   // construct the filename
-  //if (TRUE) {
+  //if (true) {
   if (thisSG->num < 100000) {
     sprintf(leftroot,"%s.rad",root);
     outptr = fopen(leftroot,"w");
@@ -3161,12 +3161,12 @@ seg_ptr add_segment (seg_group_ptr thisSG, node_ptr n0, node_ptr n1) {
 
   // does this segment already exist?
   // check neibs of first node for second node
-  int exists = FALSE;
+  int exists = false;
   for (unsigned int i=0; i<n0->numconn0; ++i) {
-    if (n0->conn0[i]->n[1] == n1) exists = TRUE;
+    if (n0->conn0[i]->n[1] == n1) exists = true;
   }
   for (unsigned int i=0; i<n0->numconn1; ++i) {
-    if (n0->conn1[i]->n[0] == n1) exists = TRUE;
+    if (n0->conn1[i]->n[0] == n1) exists = true;
   }
   // we don't need to check the other
 
@@ -3921,9 +3921,9 @@ int write_seg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
   fprintf (stderr,"  Writing .seg file");
   fflush (stderr);
 
-  // set all flags to TRUE (true==not been printed yet)
-  (void) set_radius_flags (thisSG->radii, TRUE);
-  (void) set_node_flags (thisSG->nodes, TRUE);
+  // set all flags to true (true==not been printed yet)
+  (void) set_radius_flags (thisSG->radii, true);
+  (void) set_node_flags (thisSG->nodes, true);
 
   // for this first take, blindly dump all segments and nodes
 
@@ -3991,7 +3991,7 @@ int write_seg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
         for (j=0; j<thisSG->dim; j++) fprintf (out," %g",curr->n[i]->x[j]);
         fprintf (out,"\n");
         curr->n[i]->index = ++nnode;
-        curr->n[i]->flag = FALSE;
+        curr->n[i]->flag = false;
       }
     }
     // print the radius, if it hasn't been printed yet
@@ -4000,7 +4000,7 @@ int write_seg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
       if (curr->r[i]->flag) {
         fprintf (out,"vr %g\n",curr->r[i]->r);
         curr->r[i]->index = ++nrad;
-        curr->r[i]->flag = FALSE;
+        curr->r[i]->flag = false;
       }
       }
     }
@@ -4234,9 +4234,9 @@ int write_svg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
   fflush (stderr);
   static int fileCnt = 0;
 
-  // set all flags to TRUE (true==not been printed yet)
-  //(void) set_radius_flags (thisSG->radii, TRUE);
-  //(void) set_node_flags (thisSG->nodes, TRUE);
+  // set all flags to true (true==not been printed yet)
+  //(void) set_radius_flags (thisSG->radii, true);
+  //(void) set_node_flags (thisSG->nodes, true);
 
   // make a file name
   //char outfile[255];
@@ -4257,7 +4257,7 @@ int write_svg (FILE *out, seg_group_ptr thisSG, int argc, char **argv) {
 /*
  * Recursively set all flags
  */
-int set_seg_flags (seg_group_ptr thisSG, int val) {
+int set_seg_flags (seg_group_ptr thisSG, const bool val) {
 
   seg_ptr curr;
 
@@ -4275,7 +4275,7 @@ int set_seg_flags (seg_group_ptr thisSG, int val) {
 /*
  * Recursively set all flags
  */
-int set_node_flags (node_group_ptr thisNG, int val) {
+int set_node_flags (node_group_ptr thisNG, const bool val) {
 
   node_ptr curr;
 
@@ -4303,7 +4303,7 @@ int set_node_flags (node_group_ptr thisNG, int val) {
 /*
  * Recursively set all flags
  */
-int set_radius_flags (rad_group_ptr thisRG, int val) {
+int set_radius_flags (rad_group_ptr thisRG, const bool val) {
 
   rad_ptr curr;
 
@@ -4333,8 +4333,8 @@ int set_radius_flags (rad_group_ptr thisRG, int val) {
  */
 int write_rad (FILE *out, seg_group_ptr thisSG) {
 
-  int write_no_cones = FALSE;
-  int write_many_colors = FALSE;
+  int write_no_cones = false;
+  int write_many_colors = false;
   int i;
   int count = 0;
   int nlines = 0;
@@ -4484,7 +4484,7 @@ int write_rad (FILE *out, seg_group_ptr thisSG) {
 int write_radiance_nodes (FILE *out, node_group_ptr thisNG, int dim,
   double rad, int *count, int *nlines) {
 
-  int write_many_colors = FALSE;
+  int write_many_colors = false;
   int i;
   double bigrad;
   node_ptr curr;
@@ -4543,7 +4543,7 @@ int write_radiance_nodes (FILE *out, node_group_ptr thisNG, int dim,
 int write_dots (FILE *out, seg_group_ptr thisSG, double res) {
 
   int i;
-  int write_vtk_headers = FALSE;
+  int write_vtk_headers = false;
   double *thresh;
   node_group_ptr dots;
 
@@ -4692,7 +4692,7 @@ int write_dots_2 (seg_group_ptr thisSG, node_group_ptr dots,
 
       // if the segment is between 1 and 2 thresholds long, try two points
       //if (nsubseg == 1) {
-      if (FALSE) {
+      if (false) {
 
         // set the test location
         for (i=0; i<dim; i++) testloc[i] = curr->n[0]->x[i] +

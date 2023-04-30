@@ -285,7 +285,7 @@ double min_dist_with_rad(double vx, double vy, double vz, double vr, int vcap,
 //
 int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
 
-  const int flatEndCaps = TRUE;
+  const bool flatEndCaps = true;
 
   int nx, ny, nz;
   double start[3];
@@ -350,7 +350,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
   fflush(stderr);
 
 /*
-  if (FALSE) {
+  if (false) {
     // run some tests
     double val = min_dist_with_rad(1.0,0.0,0.0,1.0, 3.0,0.0,0.0,2.0, 1.0,2.0,0.0);
     fprintf(stdout,"dist to 1,2 is %g\n",val);
@@ -395,8 +395,8 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
     rad2 /= dx;
 
     // is this segment at the end of a strand? is it an endcap?
-    const int cap1 = (flatEndCaps && curr->n[0]->numconn0 + curr->n[0]->numconn1 < 2 ? TRUE : FALSE);
-    const int cap2 = (flatEndCaps && curr->n[1]->numconn0 + curr->n[1]->numconn1 < 2 ? TRUE : FALSE);
+    const int cap1 = (flatEndCaps && curr->n[0]->numconn0 + curr->n[0]->numconn1 < 2 ? true : false);
+    const int cap2 = (flatEndCaps && curr->n[1]->numconn0 + curr->n[1]->numconn1 < 2 ? true : false);
     //fprintf(stderr,"end caps?  %d %d\n", cap1, cap2);
 
     // scale the segment into grid coords
@@ -423,7 +423,7 @@ int write_bob(FILE* ofp, seg_group_ptr thisSG, double dx) {
       // how far is this node from the segment, in voxels?
       double thisDist = 2.0;
 
-      if (FALSE) {
+      if (false) {
         // do it the old way, assuming constant radius
         thisDist = minimum_distance(x1,y1,z1, x2,y2,z2, (double)i+0.5,(double)j+0.5,(double)k+0.5) - rad1;
         // set the scaled char value: 255=inside, 0=more than 1 voxel away from surface
@@ -527,7 +527,7 @@ int read_bob (char* infile, seg_group_ptr thisSG) {
   int nz = dims[2];
 
   // recenter and rescale the data
-  //int center = FALSE;
+  //int center = false;
   float frac = 0.3;
   int scale = 14;
   int thresh = (int)(frac*256.0*scale*scale*scale);
@@ -553,7 +553,7 @@ int read_bob (char* infile, seg_group_ptr thisSG) {
 
   // add a column
   // find the start
-  if (FALSE) {
+  if (false) {
     int jlength = 6;
     int jstart = -1;
     int nxc = (nx-1)/2;
@@ -578,10 +578,10 @@ int read_bob (char* infile, seg_group_ptr thisSG) {
   unsigned char*** non = allocate_3d_array_b (nxnew, nynew, nznew);
   unsigned char*** con = allocate_3d_array_b (nxnew+1, nynew+1, nznew+1);
   for (int i=0; i<nxnew; i++) for (int j=0; j<nynew; j++) for (int k=0; k<nznew; k++) {
-    non[i][j][k] = FALSE;
+    non[i][j][k] = false;
   }
   for (int i=0; i<nxnew+1; i++) for (int j=0; j<nynew+1; j++) for (int k=0; k<nznew+1; k++) {
-    con[i][j][k] = FALSE;
+    con[i][j][k] = false;
   }
   int cellcnt = 0;
   for (int i=0; i<nx; i++)
@@ -589,15 +589,15 @@ int read_bob (char* infile, seg_group_ptr thisSG) {
   for (int k=0; k<nz; k++) {
     if (scaled[i][j][k] > thresh) {
       cellcnt++;
-      con[i+1][j+1][k+1] = TRUE;
-      non[i][j][k] = TRUE;
-      non[i][j][k+1] = TRUE;
-      non[i][j+1][k] = TRUE;
-      non[i][j+1][k+1] = TRUE;
-      non[i+1][j][k] = TRUE;
-      non[i+1][j][k+1] = TRUE;
-      non[i+1][j+1][k] = TRUE;
-      non[i+1][j+1][k+1] = TRUE;
+      con[i+1][j+1][k+1] = true;
+      non[i][j][k] = true;
+      non[i][j][k+1] = true;
+      non[i][j+1][k] = true;
+      non[i][j+1][k+1] = true;
+      non[i+1][j][k] = true;
+      non[i+1][j][k+1] = true;
+      non[i+1][j+1][k] = true;
+      non[i+1][j+1][k+1] = true;
     }
   }
   fprintf(stderr,"  found %d cells over thresh %d\n",cellcnt,thresh);

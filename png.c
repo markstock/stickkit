@@ -41,7 +41,7 @@ int free_2d_array_f (float**);
 
 float** read_png_pixels (char*, float, float, int*, int*);
 
-int write_png_file (FILE*, int, int, int, float**, float, float);
+int write_png_file (FILE*, const int, const int, const bool, float**, float, float);
 int write_png (FILE*, seg_group_ptr, int);
 
 // externs from stickkit.c
@@ -57,10 +57,10 @@ extern int max(int, int);
 //
 // scale and write an array to a png
 //
-int write_png_file (FILE* fp, int nx, int ny, int high_depth,
+int write_png_file (FILE* fp, const int nx, const int ny, const bool high_depth,
    float **red, float redmin, float redrange) {
 
-   int autorange = TRUE;
+   bool autorange = true;
    int i,j,printval,bit_depth;
    char outfile[80];
    float newminrange,newmaxrange;
@@ -73,7 +73,7 @@ int write_png_file (FILE* fp, int nx, int ny, int high_depth,
    png_structp png_ptr;
    png_infop info_ptr;
    static png_byte **img;
-   static int is_allocated = FALSE;
+   static bool is_allocated = false;
 
    // set specific bit depth
    if (high_depth) bit_depth = 16;
@@ -82,7 +82,7 @@ int write_png_file (FILE* fp, int nx, int ny, int high_depth,
    // allocate the space for the special array
    if (!is_allocated) {
       img = allocate_2d_array_pb(nx,ny,bit_depth);
-      is_allocated = TRUE;
+      is_allocated = true;
    }
 
    // set the sizes in png-understandable format
@@ -427,7 +427,7 @@ int write_png (FILE* ofp, seg_group_ptr thisSG, int res) {
   fprintf(stderr,"  writing...\n");
   fflush(stderr);
 
-  (void) write_png_file (ofp, nx, ny, TRUE, dat, 0.0, -1.0);
+  (void) write_png_file (ofp, nx, ny, true, dat, 0.0, -1.0);
 
   // free and clear
   (void) free_2d_array_f (dat);
@@ -592,7 +592,7 @@ int read_png (char* infile, seg_group_ptr this, double thresh) {
 float** read_png_pixels (char *infile, float datmin, float datrange, int* nx, int* ny) {
 
    int i,j;
-   int high_depth;
+   bool high_depth = false;
    FILE *fp;
    unsigned char header[8];
    float **dat;
@@ -709,8 +709,8 @@ float** read_png_pixels (char *infile, float datmin, float datrange, int* nx, in
    }
 
    // set specific bit depth
-   if (bit_depth == 16) high_depth = TRUE;
-   else high_depth = FALSE;
+   if (bit_depth == 16) high_depth = true;
+   else high_depth = false;
 
    // allocate the space for the image array
    img = allocate_2d_array_pb(width,height,bit_depth);
