@@ -45,3 +45,15 @@ Stickkit can do a few interesting things:
 * Get stickkit to dump .rad segments and nodes as 10 different "def6"-type things
 * That way, I can turn def0 into "light" and the others into "glow"
 
+# Citing Stickkit
+
+I don't get paid for writing or maintaining this, so if you find this tool useful or mention it in your writing, please please cite it by using the following BibTeX entry.
+
+```
+@Misc{Stickkit2017,
+  author =       {Mark J.~Stock},
+  title =        {Stickkit:  A command-line tool for manipulating segmented vector geometry in 2D or 3D space},
+  howpublished = {\url{https://github.com/markstock/stickkit}},
+  year =         {2017}
+}
+```
