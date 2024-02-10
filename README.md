@@ -1,12 +1,12 @@
 # Stickkit
 
-Copyright 2007,08,13-15,17 Mark J. Stock mstock@umich.edu
+A command-line tool for manipulating segmented vector geometry in 2D or 3D space
 
 ## Introduction
 
-Stickkit is a command-line tool for manipulating segmented vector geometry in 2D or 3D space. It is a single ANSI C file and requires no special libraries to build on most machines. It fills a gap that I found in command-line geometry processing software: a tool designed specifically for segmented geometries (graphs and networks).
+Stickkit is a command-line tool for manipulating segmented vector geometry in 2D or 3D space. It is a single ANSI C file and requires no special libraries to build on most machines. It fills a gap that I found in command-line geometry processing software: a tool designed specifically for segmented geometries (graphs and networks). Since writing this, [geos](https://github.com/libgeos/geos) now performs many of these operations.
 
-Note that similar software is available for three-dimesional triangle meshes: first my own Rocktools, and also the very powerful tool Meshlab---a GUI triangle mesh manipulation tool that can read and write a number of formats, plus perform a large variety of smoothing and simplification operations.
+Note that similar software is available for three-dimesional triangle meshes: first my own [Rocktools](https://github.com/markstock/rocktools), and also the very powerful tool [Meshlab](https://github.com/cnr-isti-vclab/meshlab)---a GUI triangle mesh manipulation tool that can read and write a number of formats, plus perform a large variety of smoothing and simplification operations.
 Files
 
 ## Get and build
