@@ -9,7 +9,7 @@ Stickkit is a command-line tool for manipulating segmented vector geometry in 2D
 Note that similar software is available for three-dimesional triangle meshes: first my own Rocktools, and also the very powerful tool Meshlab---a GUI triangle mesh manipulation tool that can read and write a number of formats, plus perform a large variety of smoothing and simplification operations.
 Files
 
-# Get and build
+## Get and build
 
 The current version of Stickkit is 0.5. On a Linux or OSX system, build it with:
 
@@ -22,7 +22,7 @@ or, to cross-compile for Windows on Linux, use:
 
     /usr/local/bin/i386-mingw32-gcc -O2 -o stickkit.exe stickkit.c -lm
 
-# Features
+## Features
 
 Stickkit can do a few interesting things:
 
@@ -36,7 +36,7 @@ Stickkit can do a few interesting things:
 * Most operations can be stacked, for example: -coarsen 0.01 -roughen 0.3 -refine .005 -roughen 0.3 -refine .002 -roughen 0.3 and will be performed in order.
 * VTK files can be opened in ParaView, an open source scientific visualization package from Kitware/ASC/Sandia/LANL/ARL. Most of the images below were made using ParaView. 
 
-# To do
+## To do
 
 * Allow writing of accurate png files
 * Use the command-line options from rockxray for aiming
@@ -45,7 +45,7 @@ Stickkit can do a few interesting things:
 * Get stickkit to dump .rad segments and nodes as 10 different "def6"-type things
 * That way, I can turn def0 into "light" and the others into "glow"
 
-# Citing Stickkit
+## Citing Stickkit
 
 I don't get paid for writing or maintaining this, so if you find this tool useful or mention it in your writing, please please cite it by using the following BibTeX entry.
 
