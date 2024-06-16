@@ -49,7 +49,9 @@
 // Version 0.6: added -rscale option
 //#define VERSION ("stickkit, version 0.6 2014-03-06 MJS")
 // Version 0.7: added -prune option
-#define VERSION ("stickkit, version 0.7 2014-03-30 MJS")
+//#define VERSION ("stickkit, version 0.7 2014-03-30 MJS")
+// Version 0.8: with bob and obj output
+#define VERSION ("stickkit, version 0.8 2024-06-20 MJS")
 
 // begin with the data structures
 
@@ -194,6 +196,7 @@ typedef enum output_format_type {
    dots,	// ASCII space-delimited, equidistant dots, for use with laser subsurface etching
    png,		// image of segments, for debugging only
    svg,		// vector-based file, using wxSVG
+   obj,		// wavefront file with triangulated solid segments
    bob		// rasterized brick of bytes
 } OUT_FORMAT;
 

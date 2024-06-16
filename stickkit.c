@@ -1,7 +1,7 @@
 /*
  * stickkit.c
  *
- * copyright 2007,08,13-15,17 Mark J. Stock mstock@umich.edu
+ * copyright 2007,08,13-15,17,24 Mark J. Stock mstock@umich.edu
  *
  * a program to read, manipulate, and write string, segmented, or
  * graph-like data in fewer than 16 space dimensions
@@ -51,6 +51,7 @@ void split_segment (seg_ptr, int, int);
 void find_seg_midpt_using_midpoint (double*, double*, seg_ptr, int);
 void find_seg_midpt_using_spline  (double*, double*, seg_ptr, int);
 void find_seg_tangents (seg_ptr, int);
+int set_seg_tangents (seg_group_ptr, int);
 int roughen_nodes (node_group_ptr, int, double);
 int identify_separate_strands (seg_group_ptr);
 int identify_connected_segments (seg_ptr, unsigned int);
@@ -84,6 +85,7 @@ int write_dots (FILE*, seg_group_ptr, double);
 int write_dots_1 (node_group_ptr, node_group_ptr, int, double *);
 int write_dots_2 (seg_group_ptr, node_group_ptr, int, double *);
 int write_dots_3 (FILE *, node_group_ptr, int);
+int write_obj (FILE*, seg_group_ptr, double);
 // utility
 int set_seg_flags (seg_group_ptr, const bool);
 int set_node_flags (node_group_ptr, const bool);
@@ -93,7 +95,10 @@ double seg_length (seg_ptr, int);
 double seg_length_sqrd (seg_ptr, int);
 double vec_dist_sqrd (double*, double*, int);
 double vec_inv_sqrt (double*, int);
-void vec_normalize (double*, double*, int);
+double vec_dot (double const * const, double const * const, const int);
+void vec_make_perpendicular (double * const, double const * const, const int);
+void vec_normalize (double*, double*,const int);
+void vec_normalize_in_place ( double*, const int);
 void vec_cross (double*, double*, double*);
 int free_nodes (node_group_ptr);
 int free_radii (rad_group_ptr);
@@ -118,6 +123,7 @@ int main (int argc, char **argv) {
   bool have_input_file = false;
   double dot_scale = 0.3;
   double bob_cell = 1.0;
+  double obj_min = 1.0;
   int png_res = 1024;
   bool zero_indexed = false;
   seg_group_ptr segs;
@@ -162,6 +168,13 @@ int main (int argc, char **argv) {
         if (argc > i+1) {
           if (!isalpha(argv[i+1][1])) {
             bob_cell = atof(argv[++i]);
+          }
+        }
+      } else if (strncmp(argv[i], "-obj", 4) == 0) {
+        out_format = obj;
+        if (argc > i+1) {
+          if (!isalpha(argv[i+1][1])) {
+            obj_min = atof(argv[++i]);
           }
         }
       } else if (strncmp(argv[i], "-noop", 5) == 0) {
@@ -378,6 +391,8 @@ int main (int argc, char **argv) {
         (void) write_rad (outptr, segs);
       } else if (out_format == dots) {
         (void) write_dots (outptr, segs, dot_scale);
+      } else if (out_format == obj) {
+        (void) write_obj (outptr, segs, obj_min);
       } else if (out_format == bob) {
         (void) write_bob (outptr, segs, bob_cell);
       } else if (out_format == png) {
@@ -1728,6 +1743,24 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
 
 
 /*
+ * Recursively set all tangents
+ */
+int set_seg_tangents (seg_group_ptr thisSG, const int dims) {
+
+  seg_ptr curr;
+
+  // there are no children, check all local entries
+  curr = thisSG->first;
+  while (curr) {
+    find_seg_tangents (curr, dims);
+    curr = curr->next;
+  }
+
+  return (0);
+}
+
+
+/*
  * Perturb all nodes according to Gaussian, scale by mean segment length
  */
 int roughen_nodes (node_group_ptr thisNG, int dim, double scale) {
@@ -1794,12 +1827,12 @@ int identify_separate_strands (seg_group_ptr thisSG) {
     if (!curr->flag) {
       // reset the counter
       cnt = 0;
-      // set the ID number for this block
-      blockcnt++;
       // recursively look through the segments, setting the block and flag
       cnt = identify_connected_segments (curr, blockcnt);
       // what happened?
       //fprintf (stderr,"block %d has %d segments\n",blockcnt,cnt);
+      // update the ID count
+      blockcnt++;
     }
     curr = curr->next;
   }
@@ -1809,7 +1842,6 @@ int identify_separate_strands (seg_group_ptr thisSG) {
   return (blockcnt);
 }
 
-int identify_connected_segments (seg_ptr, unsigned int);
 
 /*
  * Recursively look at all connected segments! Set block
@@ -1839,6 +1871,40 @@ int identify_connected_segments (seg_ptr thisSP, unsigned int blockid) {
     cnt += identify_connected_segments (thisSP->n[1]->conn1[i], blockid);
 
   return (cnt);
+}
+
+
+/*
+ * Given a strand ID, find all nodes in that strand that have only 1 neighbor
+ * return one of them
+ */
+node_ptr find_end_node_of_strand (seg_group_ptr thisSG, const unsigned int blockid) {
+
+  int cnt = 0;
+  node_ptr anend = NULL;
+  fprintf (stderr,"  looking for end nodes of strand %d...",blockid);
+
+  // check all elements
+  node_ptr currn = thisSG->nodes->first;
+  while (currn) {
+    // identify which group it is in
+    unsigned int myblock = -1;
+    if (currn->numconn0 > 0) myblock = currn->conn0[0]->block;
+    if (currn->numconn1 > 0) myblock = currn->conn1[0]->block;
+
+    // is this node in the desired strand?
+    if (myblock == blockid) {
+      const int nconnsegs = currn->numconn0 + currn->numconn1;
+      if (nconnsegs < 2) {
+        anend = currn;
+        ++cnt;
+      }
+    }
+    currn = currn->next;
+  }
+  fprintf (stderr,"found %d\n",cnt);
+
+  return anend;
 }
 
 
@@ -2419,7 +2485,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
     exit (0);
   }
   fprintf (stderr,"  Opening file %s\n",infile);
-  fprintf (stderr,"  Prescanning");
+  fprintf (stderr,"  Prescanning...");
   fflush (stderr);
 
   // read the first character after the newline
@@ -2513,7 +2579,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
     exit (0);
   }
   //fprintf (stderr,"  Opening file %s\n",infile);
-  fprintf (stderr,"  Reading");
+  fprintf (stderr,"  Reading...");
   fflush (stderr);
 
   // read the first character after the newline
@@ -2753,7 +2819,7 @@ int read_obj (char *infile, seg_group_ptr thisSG, int zero_indexed) {
     exit (0);
   }
   fprintf (stderr,"  Opening file %s\n",infile);
-  fprintf (stderr,"  Prescanning");
+  fprintf (stderr,"  Prescanning...");
   fflush (stderr);
 
   // read the first character after the newline
@@ -2806,7 +2872,7 @@ int read_obj (char *infile, seg_group_ptr thisSG, int zero_indexed) {
     exit (0);
   }
   //fprintf (stderr,"  Opening file %s\n",infile);
-  fprintf (stderr,"  Reading");
+  fprintf (stderr,"  Reading...");
   fflush (stderr);
 
   // read the first character after the newline
@@ -2982,7 +3048,7 @@ int read_rad (char *infile, seg_group_ptr thisSG) {
     exit (0);
   }
   //fprintf (stderr,"Opening file %s\n",infile);
-  fprintf (stderr,"Reading");
+  fprintf (stderr,"Reading...");
   fflush (stderr);
 
   // read a whole line from the input file
@@ -4754,6 +4820,303 @@ int write_dots_3 (FILE *out, node_group_ptr thisNG, int dim) {
 
 
 /*
+ * March along paths and write triangle mesh
+ */
+int write_obj (FILE *out, seg_group_ptr segs, const double mindx) {
+
+  int i;
+  int count = 0;
+  int nlines = 0;
+  seg_ptr curr;
+
+  fprintf (stderr,"Writing .obj file\n");
+  fflush (stderr);
+
+  // first, identify separate disconnected strands
+  const int nstrands = identify_separate_strands (segs);
+  fprintf (stderr,"  found %d separate strands\n", nstrands);
+
+  // set flags to indicate which segments are done
+  (void) set_seg_flags (segs, false);
+  // maybe set the node flags, too?
+  (void) set_node_flags (segs->nodes, false);
+
+  // make sure we dump 3-dimensional data (add 0.0 for z dim if 2D, ignore dims higher than 3)
+  int thisdim = segs->dim;
+  if (thisdim > 3) thisdim = 3;
+
+  // set tangent vectors on all segments
+  set_seg_tangents (segs, thisdim);
+
+  // the current and previous basis vectors
+  // b1 = tangent along strand
+  // b2 = first perpendicular axis
+  // b3 = second perpendicular axis = b1 x b2
+  double thisb1[3], thisb2[3], thisb3[3];
+  double lastb1[3], lastb2[3], lastb3[3];
+
+  // these need to be persistent across strands
+  int lastidx = 1;
+  int lastcnt = 0;
+  int curridx = -1;
+  int currcnt = -1;
+
+  // for this first take, blindly dump all segments and nodes
+  fprintf (out,"# %s\n",VERSION);
+
+  // write one strand at a time
+  for (int istrand=0; istrand<nstrands; ++istrand) {
+
+    // find one end of this strand
+    node_ptr currn = find_end_node_of_strand(segs, istrand);
+    node_ptr lastn = NULL;
+    node_ptr nextn = NULL;
+    seg_ptr currseg = NULL;
+    seg_ptr nextseg = NULL;
+
+    while (currn) {
+      fprintf (stderr,"node at %g %g %g\n", currn->x[0], currn->x[1], currn->x[2]);
+
+      // find next node and next segment
+      if (currn->numconn0 > 0) {
+        if (! currn->conn0[0]->n[1]->flag) {
+          nextseg = currn->conn0[0];
+          nextn = currn->conn0[0]->n[1];
+          fprintf (stderr,"    next node is %d along segment %d\n", nextn->index, nextseg->index);
+        } else if (currn->numconn1 > 0) {
+          if (! currn->conn1[0]->n[0]->flag) {
+            nextseg = currn->conn1[0];
+            nextn = currn->conn1[0]->n[0];
+            fprintf (stderr,"    next node is %d along segment %d\n", nextn->index, nextseg->index);
+          }
+        } else {
+          nextn = NULL;
+          nextseg = NULL;
+        }
+      } else {
+        nextn = NULL;
+        nextseg = NULL;
+      }
+
+      // ensure we have a radius for each end
+      double r0 = segs->radius;
+      // find which radius to use!
+      //if (curr->r[0]) r0 = curr->r[0]->r;
+      // how many nodes on each ring?
+      //int n0 = (int)(0.5 + (6.28318531 * r0) / mindx);
+      //if (n0 < 3) n0 = 3;
+      //if (r0 == 0.0) n0 = 1;
+      int n0 = 13;
+
+      // set this node's basis vectors - first the tangent
+      seg_ptr testseg = NULL;
+      if (currseg) testseg = currseg;
+      if (nextseg) testseg = nextseg;
+      tan_ptr tptr = NULL;
+      if (testseg->n[0] == currn) {
+        tptr = testseg->t[0];
+      } else {
+        tptr = testseg->t[1];
+      }
+      for (i=0; i<3; i++) thisb1[i] = tptr->x[i];
+      vec_normalize_in_place(thisb1, 3);
+      fprintf (stderr,"    tangent is %g %g %g\n", thisb1[0], thisb1[1], thisb1[2]);
+
+      // now set perpendicular basis vectors!
+      if (lastn == NULL) {
+        // if this is the first node in the strand, make one up!
+        if (abs(thisb1[0]) > 0.9) {
+          thisb2[0] = 0.0; thisb2[1] = 1.0; thisb2[2] = 0.0;
+        } else {
+          thisb2[0] = 1.0; thisb2[1] = 0.0; thisb2[2] = 0.0;
+        }
+      } else {
+        // this is not the first node, so rotate the two other basis vectors
+        // first, find the axis and angle of rotation from node lastn to currn
+        const double angle = acos(vec_dot(lastb1, thisb1, 3));
+        fprintf (stderr,"    angle is %g\n", angle);
+        // acos always returns 0..pi
+        if (angle < 0.01) {
+          // if the angle is minuscule, just copy the 2nd basis vector
+          for (i=0; i<3; i++) thisb2[i] = lastb2[i];
+        } else {
+          // if the angle is significant, must rotate b2 around the rotational axis
+          double axis[3];
+          vec_cross (lastb1, thisb1, axis);
+          vec_normalize_in_place(axis, 3);
+          fprintf (stderr,"    rotation is %g %g %g\n", axis[0], axis[1], axis[2]);
+          // use a rotation matrix from axis-angle
+          const double ca = 1.0 - cos(angle);
+          const double omc = 1.0 - cos(angle);
+          const double sa = sin(angle);
+          double newb2[3];
+          newb2[0] = lastb2[0] * (ca+axis[0]*axis[0]*omc) +
+                     lastb2[1] * (axis[0]*axis[1]*omc-axis[2]*sa) +
+                     lastb2[2] * (axis[0]*axis[2]*omc+axis[1]*sa);
+          newb2[1] = lastb2[0] * (axis[1]*axis[0]*omc+axis[2]*sa) +
+                     lastb2[1] * (ca+axis[1]*axis[1]*omc) +
+                     lastb2[2] * (axis[1]*axis[2]*omc-axis[0]*sa);
+          newb2[2] = lastb2[0] * (axis[2]*axis[0]*omc-axis[1]*sa) +
+                     lastb2[1] * (axis[2]*axis[1]*omc+axis[0]*sa) +
+                     lastb2[2] * (ca+axis[2]*axis[2]*omc);
+        }
+      }
+      // make the first vector perpendicular to the second one
+      vec_make_perpendicular(thisb2, thisb1, 3);
+      vec_normalize_in_place(thisb2, 3);
+      // calc b3 from b1, b2
+      vec_cross (thisb1, thisb2, thisb3);
+      fprintf (stderr,"    basis2 is %g %g %g\n", thisb2[0], thisb2[1], thisb2[2]);
+      fprintf (stderr,"    basis3 is %g %g %g\n", thisb3[0], thisb3[1], thisb3[2]);
+
+      // if this is the first node AND the radius is not 0, get ready for an endcap
+      if (lastn == NULL && n0 > 1) {
+        fprintf (out,"v");
+        for (i=0; i<thisdim; i++) fprintf (out," %g", currn->x[i]);
+        for (i=thisdim; i<3; i++) fprintf (out," 0.");
+        fprintf (out,"\n");
+        lastidx = lastidx + lastcnt;
+        lastcnt = 1;
+      }
+
+      // write the ring of output nodes
+      for (int j=0; j<n0; ++j) {
+        const double theta = 2. * M_PI * (j+0.5) / (double)n0;
+        const double st = r0 * sin(theta);
+        const double ct = r0 * cos(theta);
+        fprintf (out,"v");
+        for (i=0; i<thisdim; i++) fprintf (out," %g", currn->x[i] + ct*thisb2[i] + st*thisb3[i]);
+        for (i=thisdim; i<3; i++) fprintf (out," 0.");
+        fprintf (out,"\n");
+        //fprintf (out," # node %d\n", currn->index);
+      }
+      // index of the first vertex (1-indexed)
+      curridx = lastidx + lastcnt;
+      currcnt = n0;
+      fprintf (stderr,"    last nodes are %d to %d\n", lastidx, curridx-1);
+      fprintf (stderr,"    curr nodes are %d to %d\n", curridx, curridx+currcnt-1);
+
+      // write any triangles necessary
+      if (currseg) {
+        for (int j=0; j<n0-1; ++j) {
+          fprintf (out,"f %d %d %d\n", lastidx+j, lastidx+j+1, curridx+j);
+          fprintf (out,"f %d %d %d\n", lastidx+j+1, curridx+j+1, curridx+j);
+        }
+        // the last pair needs special treatment
+        fprintf (out,"f %d %d %d\n", lastidx+lastcnt-1, lastidx, curridx+currcnt-1);
+        fprintf (out,"f %d %d %d\n", lastidx, curridx, curridx+currcnt-1);
+      } else if (lastn == NULL && n0 > 1) {
+        fprintf (stderr,"    making endcap around node %d\n", lastidx);
+        // this is the starting endcap
+        for (int j=0; j<n0-1; ++j) {
+          fprintf (out,"f %d %d %d\n", curridx+j, lastidx, curridx+j+1);
+        }
+        // the last one needs special treatment
+        fprintf (out,"f %d %d %d\n", curridx+currcnt-1, lastidx, curridx);
+      }
+
+      // make the ending endcap
+      if (nextseg == NULL && n0 > 1) {
+        fprintf (stderr,"    making endcap around node %d\n", curridx+currcnt);
+        // first the central vertex
+        fprintf (out,"v");
+        for (i=0; i<thisdim; i++) fprintf (out," %g", currn->x[i]);
+        for (i=thisdim; i<3; i++) fprintf (out," 0.");
+        fprintf (out,"\n");
+        // then the triangles
+        for (int j=0; j<n0-1; ++j) {
+          fprintf (out,"f %d %d %d\n", curridx+j, curridx+j+1, curridx+currcnt);
+        }
+        // the last one needs special treatment
+        fprintf (out,"f %d %d %d\n", curridx+currcnt-1, curridx, curridx+currcnt);
+        // update currcnt for the next ring
+        currcnt += 1;
+      }
+
+      // mark this node as done
+      currn->flag = true;
+
+      //for (int i=0; i<currn->numconn0; ++i) {
+      //  seg_ptr thisseg = currn->conn0[i];
+      //  fprintf (stderr,"    conn0 seg %d has nodes %d %d\n", thisseg->index, thisseg->n[0]->index, thisseg->n[1]->index);
+      //}
+      //for (int i=0; i<currn->numconn1; ++i) {
+      //  seg_ptr thisseg = currn->conn1[i];
+      //  fprintf (stderr,"    conn1 seg %d has nodes %d %d\n", thisseg->index, thisseg->n[0]->index, thisseg->n[1]->index);
+      //}
+
+      // copy current to last
+      lastn = currn;
+      currseg = nextseg;
+      currn = nextn;
+      lastidx = curridx;
+      lastcnt = currcnt;
+      for (i=0; i<3; i++) lastb1[i] = thisb1[i];
+      for (i=0; i<3; i++) lastb2[i] = thisb2[i];
+      for (i=0; i<3; i++) lastb3[i] = thisb3[i];
+    }
+
+  }
+  return 1;
+
+  // then, all of the segments
+  count = 0;
+  curr = segs->first;
+  while (curr) {
+
+    // ensure we have a radius for each end
+    double r0 = segs->radius;
+    if (curr->r[0]) r0 = curr->r[0]->r;
+    double r1 = segs->radius;
+    if (curr->r[1]) r1 = curr->r[1]->r;
+
+    // how many nodes on each ring?
+    int n0 = (int)(0.5 + (6.28318531 * r0) / mindx);
+    if (n0 < 3) n0 = 3;
+    if (r0 == 0.0) n0 = 1;
+    int n1 = (int)(0.5 + (6.28318531 * r1) / mindx);
+    if (n1 < 3) n1 = 3;
+    if (r1 == 0.0) n1 = 1;
+
+    // do we write a cylinder or a cone?
+    if (curr->r[0] && curr->r[1]) {
+      // if we have radii for both nodes...
+      {
+        // different radius, write a cone
+        for (i=0; i<thisdim; i++) fprintf (out," %12.8e",curr->n[0]->x[i]);
+        for (i=thisdim; i<3; i++) fprintf (out," 0.");
+        for (i=0; i<thisdim; i++) fprintf (out," %12.8e",curr->n[1]->x[i]);
+        for (i=thisdim; i<3; i++) fprintf (out," 0.");
+        fprintf (out," %12.8e %12.8e\n",curr->r[0]->r,curr->r[1]->r);
+      }
+    } else {
+      // if we have no radii for either node...
+      // use the global radius and write a cylinder
+      for (i=0; i<thisdim; i++) fprintf (out," %12.8e",curr->n[0]->x[i]);
+      for (i=thisdim; i<3; i++) fprintf (out," 0.");
+      for (i=0; i<thisdim; i++) fprintf (out," %12.8e",curr->n[1]->x[i]);
+      for (i=thisdim; i<3; i++) fprintf (out," 0.");
+      fprintf (out," %12.8e\n",segs->radius);
+    }
+
+    // don't just use whichever node is next in the list!
+    // must use the adjacent segment instead!
+    curr = curr->next;
+
+    if (++nlines%DOTPER == 1) {
+      fprintf(stderr,".");
+      fflush(stderr);
+    }
+  }
+
+  fprintf(stderr,"%d elements\n",nlines);
+  fflush(stderr);
+
+  // if things bomb, send back a nonzero
+}
+
+
+/*
  * Create a Gaussian perturbation in as many dimensions as required,
  * mean is 0, std dev is scale
  */
@@ -4817,11 +5180,35 @@ double vec_inv_sqrt (double *x, int dim) {
 }
 
 
+/* dot product */
+double vec_dot (double const * const x, double const * const y, const int dim) {
+  double dot = 0.;
+  for (int i=0; i<dim; i++) dot += x[i]*y[i];
+  return dot;
+}
+
+
+/* make the first vector perpendicular to the second one */
+void vec_make_perpendicular (double * const x, double const * const dir, const int dim) {
+  // first, find the length of the direction vector
+  double dirlen = 0.;
+  for (int i=0; i<dim; i++) dirlen += dir[i]*dir[i];
+  dirlen = 1./sqrt(dirlen);
+
+  // now, find the dot product of the normalized direction vector and the test vector
+  double dotp = 0.;
+  for (int i=0; i<dim; i++) dotp += x[i]*dir[i]*dirlen;
+
+  // finally, subtract the part of x that is along dir
+  for (int i=0; i<dim; i++) x[i] -= dotp*dir[i]*dirlen;
+
+  return;
+}
+
 /* normalize a vector to unit length */
-void vec_normalize (double *x, double *xnorm, int dim) {
+void vec_normalize (double *x, double *xnorm, const int dim) {
   int i;
   double dotp = 0.;
-  double *norm;
 
   for (i=0; i<dim; i++) dotp += x[i]*x[i];
   dotp = 1./sqrt(dotp);
@@ -4830,6 +5217,16 @@ void vec_normalize (double *x, double *xnorm, int dim) {
   return;
 }
 
+void vec_normalize_in_place (double *x, const int dim) {
+  int i;
+  double dotp = 0.;
+
+  for (i=0; i<dim; i++) dotp += x[i]*x[i];
+  dotp = 1./sqrt(dotp);
+  for (i=0; i<dim; i++) x[i] *= dotp;
+
+  return;
+}
 
 /* 3d vector cross product */
 void vec_cross (double *x, double *y, double *prod) {
@@ -4969,15 +5366,17 @@ int Usage(char progname[MAXSTR],int status) {
   {
      "where [options] are one or more of the following:",
      " ",
-     "   -seg        write an obj-like file of the segments (default)",
+     "   -seg        write a seg file (like wavefront obj) of the segments (default)",
      " ",
      "   -svg        write a scalable vector graphic image (SVG)",
      " ",
      "   -rad        write a Radiance-readable file of the cylinders",
      " ",
-     "   -vtk        write a VTK- and mayavi-readable file",
+     "   -vtk        write a VTK-format file for paraview, etc.",
      " ",
      "   -png res    write a PNG image file with given maximum resolution",
+     " ",
+     "   -obj dx     write a wavefront-format triangle mesh with minimum edge length dx",
      " ",
      "   -bob dx     write a 3D brick-of-bytes with cell size dx",
      " ",
@@ -5024,6 +5423,7 @@ int Usage(char progname[MAXSTR],int status) {
      " ",
      "   -zeroindexed  indicates that segment indices in input file start at",
      "               0 instead of 1",
+     " ",
      "   -version    returns version information",
      " ",
      "   -help       returns this help information",
