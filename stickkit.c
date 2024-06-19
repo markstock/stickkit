@@ -64,8 +64,8 @@ int scale_radii (rad_group_ptr, double*);
 int split_and_write_rad (seg_group_ptr, char*);
 int split_into_two_seg_groups (node_group_ptr, int, double, seg_group_ptr, seg_group_ptr);
 // input/output
-int read_seg (char*, seg_group_ptr, int);
-int read_obj (char*, seg_group_ptr, int);
+int read_seg (char*, seg_group_ptr, const int);
+int read_obj (char*, seg_group_ptr, const int);
 int read_rad (char*, seg_group_ptr);
 int read_radiance_floats (FILE*, double*);
 seg_ptr add_segment (seg_group_ptr, node_ptr, node_ptr);
@@ -2473,7 +2473,7 @@ int split_into_two_seg_groups (node_group_ptr thisNG, int split_dim, double spli
 /*
  * Read a .seg file (syntax very much like .obj)
  */
-int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
+int read_seg (char *infile, seg_group_ptr thisSG, const int zero_indexed) {
 
   int i,j,k,nnode,nrad,ntan,nlines;
   int n0index,n1index,n0rad,n1rad,n0tan,n1tan;
@@ -2718,7 +2718,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
           if (newval[j] == '/' || newval[j] == '\0') break;
         strncpy(sub,newval+i+1,j);
         sub[j-i-1] = '\0';
-        n1rad = atoi(sub);
+        if (j-i > 1) n1rad = atoi(sub);
         //fprintf (stderr,"i %d, j %d, sub (%s) (%d)\n",i,j,sub,atoi(sub));
         // should we continue?
         if (newval[j] == '/') {
@@ -2726,7 +2726,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
             if (newval[k] == '/' || newval[k] == '\0') break;
           strncpy(sub,newval+j+1,k);
           sub[k-j-1] = '\0';
-          n1tan = atoi(sub);
+          if (k-j > 1) n1tan = atoi(sub);
           //fprintf (stderr,"j %d, k %d, sub (%s) (%d)\n",j,k,sub,atoi(sub));
         }
       }
@@ -2811,7 +2811,7 @@ int read_seg (char *infile, seg_group_ptr thisSG, int zero_indexed) {
 /*
  * Read a .obj file (and keep the edges)
  */
-int read_obj (char *infile, seg_group_ptr thisSG, int zero_indexed) {
+int read_obj (char *infile, seg_group_ptr thisSG, const int zero_indexed) {
 
   int i,j,k,nnode,nlines;
   int n0index,n1index,n2index;
