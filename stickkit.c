@@ -50,7 +50,7 @@ int split_long_segs (seg_group_ptr, double, int, int);
 void split_segment (seg_ptr, int, int);
 void find_seg_midpt_using_midpoint (double*, double*, seg_ptr, int);
 void find_seg_midpt_using_spline  (double*, double*, seg_ptr, int);
-void find_seg_tangents (seg_ptr, int);
+void find_seg_tangents (seg_ptr, const int);
 int set_seg_tangents (seg_group_ptr, int);
 int roughen_nodes (node_group_ptr, int, double);
 int identify_separate_strands (seg_group_ptr);
@@ -1337,8 +1337,8 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   fprintf(stderr,"making tangents\n");
   if (!thisSP->t[0] || !thisSP->t[1]) find_seg_tangents (thisSP, dim);
 
-  //fprintf(stderr,"  tangent0 %g %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1],thisSP->t[0]->x[2]);
-  //fprintf(stderr,"  tangent1 %g %g %g\n",thisSP->t[1]->x[0],thisSP->t[1]->x[1],thisSP->t[1]->x[2]);
+  //fprintf(stderr,"  tangent0 %g %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1],thisSP->t[0]->x[dim-1]);
+  //fprintf(stderr,"  tangent1 %g %g %g\n",thisSP->t[1]->x[0],thisSP->t[1]->x[1],thisSP->t[1]->x[dim-1]);
 
   // compute the length of the edge
 /*
@@ -1404,7 +1404,7 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
     //fprintf(stdout,"  a %g %g %g %g\n",a[0],a[1],a[2],a[3]);
   }
 
-  //fprintf(stderr,"  real node loc %g %g %g\n",loc[0],loc[1],loc[2]);
+  //fprintf(stderr,"  real node loc %g %g %g\n",loc[0],loc[1],loc[dim-1]);
   //exit(0);
 
   // Now, do the radius (must find slope of radius?) -------------------
@@ -1418,7 +1418,7 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   // find the length of this segment
   dl = sqrt(vec_dist_sqrd (thisSP->n[0]->x, thisSP->n[1]->x, dim));
 
-  //fprintf(stderr,"\ndoing radius between %g and %g, length %g\n",r0,r1,dl);
+  fprintf(stderr,"\ndoing radius between %g and %g, length %g\n",r0,r1,dl);
   if (r0 < -EPSILON || r1 < -EPSILON) exit(0);
 
   // find the radius of the next node past n[0]
@@ -1521,7 +1521,7 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
 /*
  * Find the tangent vectors for a segment
  */
-void find_seg_tangents (seg_ptr thisSP, int dim) {
+void find_seg_tangents (seg_ptr thisSP, const int dim) {
 
   int i,j;
   int do_later0 = false;
@@ -1530,19 +1530,22 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
   double x[dim],dl[dim],dlnorm[dim],other[dim];
   node_ptr n0 = thisSP->n[0];
   node_ptr n1 = thisSP->n[1];
+  bool debug = false;
+
+  if (debug) fprintf(stderr,"nodes %d %d\n", n0->index, n1->index);
 
   // we may need dl
   for (i=0; i<dim; i++) dl[i] = n1->x[i] - n0->x[i];
-  fprintf(stderr,"  dl %g %g\n",dl[0],dl[1]);
+  if (debug) fprintf(stderr,"  dl %g %g %g\n",dl[0],dl[1],dl[dim-1]);
   (void) vec_normalize (dl, dlnorm, dim);
-  fprintf(stderr,"  dlnorm %g %g\n",dlnorm[0],dlnorm[1]);
+  if (debug) fprintf(stderr,"  dlnorm %g %g %g\n",dlnorm[0],dlnorm[1],dlnorm[dim-1]);
 
   // do we have a tangent vector already?
   if (!thisSP->t[0]) {
-    fprintf(stderr,"  no t[0] %d %d\n", n0->numconn0, n0->numconn1);
+    if (debug) fprintf(stderr,"  no t[0] %d %d\n", n0->numconn0, n0->numconn1);
 
     // create the tangent
-    thisSP->t[0] = add_tangent (thisSP->parent->tangents, dim, dl, 0);
+    thisSP->t[0] = add_tangent (thisSP->parent->tangents, dim, dlnorm, 0);
 
     // if this is an end, then mirror the other tangent
     if (n0->numconn0 + n0->numconn1 == 1) {
@@ -1554,36 +1557,36 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       // now, loop over connected segments, counting this one
       for (i=0; i<dim; i++) x[i] = 0.;
       radsum = 0.;
-      //fprintf(stderr,"    conn %d %d\n",n0->numconn0,n0->numconn1);
+      //if (debug) fprintf(stderr,"    conn %d %d\n",n0->numconn0,n0->numconn1);
       for (j=0; j<n0->numconn0; j++) {
         // sum the radius-weighted, normalized tangent vectors
         for (i=0; i<dim; i++) other[i] = n0->conn0[j]->n[1]->x[i] -
                                          n0->conn0[j]->n[0]->x[i];
-        (void) vec_normalize (other, other, dim);
-        fprintf(stderr,"      other %g %g\n",other[0],other[1]);
+        (void) vec_normalize_in_place (other, dim);
+        if (debug) fprintf(stderr,"      other %g %g %g\n",other[0],other[1],other[dim-1]);
         if (n0->conn0[j]->r[0])
           otherrad = pow (n0->conn0[j]->r[0]->r, 2);
         else
           otherrad = pow (thisSP->parent->radius, 2);
-        fprintf(stderr,"      otherrad %g\n",otherrad);
+        if (debug) fprintf(stderr,"      otherrad %g\n",otherrad);
         for (i=0; i<dim; i++) x[i] += other[i] * otherrad;
         radsum += otherrad;
       }
       for (j=0; j<n0->numconn1; j++) {
         for (i=0; i<dim; i++) other[i] = n0->conn1[j]->n[1]->x[i] -
                                          n0->conn1[j]->n[0]->x[i];
-        (void) vec_normalize (other, other, dim);
-        fprintf(stderr,"      other %g %g\n",other[0],other[1]);
+        (void) vec_normalize_in_place (other, dim);
+        if (debug) fprintf(stderr,"      other %g %g %g\n",other[0],other[1],other[dim-1]);
         if (n0->conn1[j]->r[1])
           otherrad = pow (n0->conn1[j]->r[1]->r, 2);
         else
           otherrad = pow (thisSP->parent->radius, 2);
-        fprintf(stderr,"      otherrad %g\n",otherrad);
+        if (debug) fprintf(stderr,"      otherrad %g\n",otherrad);
         for (i=0; i<dim; i++) x[i] += other[i] * otherrad;
         radsum += otherrad;
       }
-      fprintf(stderr,"    dlsum %g %g %g\n",x[0],x[1],x[2]);
-      fprintf(stderr,"    radsum %g\n",radsum);
+      if (debug) fprintf(stderr,"    dlsum %g %g %g\n",x[0],x[1],x[dim-1]);
+      if (debug) fprintf(stderr,"    radsum %g\n",radsum);
 
       if (thisSP->r[0]) thisrad = pow (thisSP->r[0]->r, 2);
       else thisrad = pow (thisSP->parent->radius, 2);
@@ -1593,26 +1596,24 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       // finally, if this node just has 2 segments, use the same
       //   tangent on the other end
       if (n0->numconn0 + n0->numconn1 == 2) {
-        fprintf(stderr,"    two-sided\n");
+        if (debug) fprintf(stderr,"    two-sided\n");
 
         // just use the weighted norm
         for (i=0; i<dim; i++) thisSP->t[0]->x[i] = x[i];
-        (void) vec_normalize (thisSP->t[0]->x, thisSP->t[0]->x, dim);
+        (void) vec_normalize_in_place (thisSP->t[0]->x, dim);
 
         // and copy it to the other segment
         for (j=0; j<n0->numconn0; j++) {
           if (n0->conn0[j] != thisSP) {
             if (!n0->conn0[j]->t[0]) {
-              fprintf(stderr,"      add_tangent0 %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1]);
-              n0->conn0[j]->t[0] = add_tangent (thisSP->parent->tangents,
-                dim, thisSP->t[0]->x, 0);
+              if (debug) fprintf(stderr,"      add_tangent0 %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1]);
+              n0->conn0[j]->t[0] = add_tangent (thisSP->parent->tangents, dim, thisSP->t[0]->x, 0);
         } } }
         for (j=0; j<n0->numconn1; j++) {
           if (n0->conn1[j] != thisSP) {
             if (!n0->conn1[j]->t[1]) {
-              fprintf(stderr,"      add_tangent1 %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1]);
-              n0->conn1[j]->t[1] = add_tangent (thisSP->parent->tangents,
-                dim, thisSP->t[0]->x, 0);
+              if (debug) fprintf(stderr,"      add_tangent1 %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1]);
+              n0->conn1[j]->t[1] = add_tangent (thisSP->parent->tangents, dim, thisSP->t[0]->x, 0);
         } } }
 
       } else {
@@ -1622,7 +1623,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
         // if its a lot more, then, um, 
         for (i=0; i<dim; i++)
           thisSP->t[0]->x[i] = thisrad*x[i] + (1.-thisrad)*dlnorm[i];
-        (void) vec_normalize (thisSP->t[0]->x, thisSP->t[0]->x, dim);
+        (void) vec_normalize_in_place (thisSP->t[0]->x, dim);
       }
     }
 
@@ -1630,13 +1631,15 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
 
   // is there one on this side?
   if (!thisSP->t[1]) {
-    fprintf(stderr,"  no t[1] %d %d\n", n1->numconn0, n1->numconn1);
+    if (debug) fprintf(stderr,"  no t[1] %d %d\n", n1->numconn0, n1->numconn1);
 
-    thisSP->t[1] = add_tangent (thisSP->parent->tangents, dim, dl, 0);
+    thisSP->t[1] = add_tangent (thisSP->parent->tangents, dim, dlnorm, 0);
+    if (debug) fprintf(stderr,"    why add a tangent now?\n");
 
     // if this is an end, then mirror the other tangent
     if (n1->numconn0 + n1->numconn1 == 1) {
       do_later1 = true;
+      if (debug) fprintf(stderr,"    doing later\n");
 
     // otherwise, use summations
     } else {
@@ -1648,7 +1651,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
         // sum the radius-weighted, normalized tangent vectors
         for (i=0; i<dim; i++) other[i] = n1->conn0[j]->n[1]->x[i] -
                                          n1->conn0[j]->n[0]->x[i];
-        (void) vec_normalize (other, other, dim);
+        (void) vec_normalize_in_place (other, dim);
         if (n1->conn0[j]->r[0])
           otherrad = pow (n1->conn0[j]->r[0]->r, 2);
         else
@@ -1659,7 +1662,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       for (j=0; j<n1->numconn1; j++) {
         for (i=0; i<dim; i++) other[i] = n1->conn1[j]->n[1]->x[i] -
                                          n1->conn1[j]->n[0]->x[i];
-        (void) vec_normalize (other, other, dim);
+        (void) vec_normalize_in_place (other, dim);
         if (n1->conn1[j]->r[1])
           otherrad = pow (n1->conn1[j]->r[1]->r, 2);
         else
@@ -1667,8 +1670,8 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
         for (i=0; i<dim; i++) x[i] += other[i] * otherrad;
         radsum += otherrad;
       }
-      fprintf(stderr,"    dlsum %g %g %g\n",x[0],x[1],x[2]);
-      fprintf(stderr,"    radsum %g\n",radsum);
+      if (debug) fprintf(stderr,"    dlsum %g %g %g\n",x[0],x[1],x[dim-1]);
+      if (debug) fprintf(stderr,"    radsum %g\n",radsum);
 
       if (thisSP->r[1]) thisrad = pow (thisSP->r[1]->r, 2);
       else thisrad = pow (thisSP->parent->radius, 2);
@@ -1678,24 +1681,22 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       // finally, if this node just has 2 segments, use the same
       //   tangent on the other end
       if (n1->numconn0 + n1->numconn1 == 2) {
-        fprintf(stderr,"    two-sided\n");
+        if (debug) fprintf(stderr,"    two-sided\n");
 
         // just use the weighted norm
         for (i=0; i<dim; i++) thisSP->t[1]->x[i] = x[i];
-        (void) vec_normalize (thisSP->t[1]->x, thisSP->t[1]->x, dim);
+        (void) vec_normalize_in_place (thisSP->t[1]->x, dim);
 
         // and copy it to the other segment
         for (j=0; j<n1->numconn0; j++) {
           if (n1->conn0[j] != thisSP) {
             if (!n1->conn0[j]->t[0]) {
-              n1->conn0[j]->t[0] = add_tangent (thisSP->parent->tangents,
-                dim, thisSP->t[1]->x, 0);
+              n1->conn0[j]->t[0] = add_tangent (thisSP->parent->tangents, dim, thisSP->t[1]->x, 0);
         } } }
         for (j=0; j<n1->numconn1; j++) {
           if (n1->conn1[j] != thisSP) {
             if (!n1->conn1[j]->t[1]) {
-              n1->conn1[j]->t[1] = add_tangent (thisSP->parent->tangents,
-                dim, thisSP->t[1]->x, 0);
+              n1->conn1[j]->t[1] = add_tangent (thisSP->parent->tangents, dim, thisSP->t[1]->x, 0);
         } } }
 
       } else {
@@ -1705,7 +1706,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
         // if its a lot more, then, um, 
         for (i=0; i<dim; i++)
           thisSP->t[1]->x[i] = thisrad*x[i] + (1.-thisrad)*dlnorm[i];
-        (void) vec_normalize (thisSP->t[1]->x, thisSP->t[1]->x, dim);
+        (void) vec_normalize_in_place (thisSP->t[1]->x, dim);
       }
     }
   }
@@ -1713,8 +1714,8 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
   // if both nodes are ends, then the segment is straight
   if (do_later0 && do_later1) {
     for (i=0; i<dim; i++) thisSP->t[0]->x[i] = dl[i];
-    for (i=0; i<dim; i++) thisSP->t[1]->x[i] = thisSP->t[0]->x[i];
-    //fprintf(stderr,"    special case 1\n");
+    for (i=0; i<dim; i++) thisSP->t[1]->x[i] = dl[i];
+    //if (debug) fprintf(stderr,"    special case 1\n");
 
   // if just one is an end, copy the other end's tangent, but mirror it
   } else if (do_later0) {
@@ -1725,7 +1726,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       dotp += dlnorm[i] * thisSP->t[1]->x[i];
     for (i=0; i<dim; i++)
       thisSP->t[0]->x[i] = 2.*dlnorm[i]*dotp - thisSP->t[1]->x[i];
-    //fprintf(stderr,"    special case 2\n");
+    //if (debug) fprintf(stderr,"    special case 2\n");
 
   } else if (do_later1) {
 
@@ -1735,7 +1736,7 @@ void find_seg_tangents (seg_ptr thisSP, int dim) {
       dotp += dlnorm[i] * thisSP->t[0]->x[i];
     for (i=0; i<dim; i++)
       thisSP->t[1]->x[i] = 2.*dlnorm[i]*dotp - thisSP->t[0]->x[i];
-    //fprintf(stderr,"    special case 3\n");
+    if (debug) fprintf(stderr,"    special case 3\n");
   }
 
   return;
@@ -1882,11 +1883,13 @@ node_ptr find_end_node_of_strand (seg_group_ptr thisSG, const unsigned int block
 
   int cnt = 0;
   node_ptr anend = NULL;
-  fprintf (stderr,"  looking for end nodes of strand %d...",blockid);
+  fprintf (stderr,"  looking for end nodes of strand %d...\n",blockid);
+  fprintf (stderr,"    seg group has %d segments and %d nodes\n",thisSG->num,thisSG->nodes->num);
 
   // check all elements
   node_ptr currn = thisSG->nodes->first;
   while (currn) {
+    fprintf (stderr,"    node %d\n",currn->index);
     // identify which group it is in
     unsigned int myblock = -1;
     if (currn->numconn0 > 0) myblock = currn->conn0[0]->block;
@@ -1895,6 +1898,7 @@ node_ptr find_end_node_of_strand (seg_group_ptr thisSG, const unsigned int block
     // is this node in the desired strand?
     if (myblock == blockid) {
       const int nconnsegs = currn->numconn0 + currn->numconn1;
+      fprintf (stderr,"    node has %d connsegs\n",nconnsegs);
       if (nconnsegs < 2) {
         anend = currn;
         ++cnt;
@@ -1902,7 +1906,8 @@ node_ptr find_end_node_of_strand (seg_group_ptr thisSG, const unsigned int block
     }
     currn = currn->next;
   }
-  fprintf (stderr,"found %d\n",cnt);
+  fprintf (stderr,"    found %d\n",cnt);
+  if (cnt == 0) exit(1);
 
   return anend;
 }
@@ -2069,6 +2074,7 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
   int axis = args->iarg[0];
   seg_ptr curr;
   node_ptr rootnode,tipnode;
+  const bool debug = false;
 
   // allocate space for a moment on each node
   int np1 = thisSG->nodes->num+1;
@@ -2140,14 +2146,14 @@ int set_treelike_radii_3d (seg_group_ptr thisSG, ACTION *args) {
         rad = 2.*sqrt(lensq*armsq)/stress;
         curr->r[0] = add_radius (thisSG->radii, rad, 0);
         curr->r[1] = add_radius (thisSG->radii, rad, 0);
-        fprintf (stderr,"len %g, arm %g\n",sqrt(lensq),sqrt(armsq));
-        fprintf (stderr,"  tip has radius %g\n",rad);
+        if (debug) fprintf (stderr,"len %g, arm %g\n",sqrt(lensq),sqrt(armsq));
+        if (debug) fprintf (stderr,"  tip has radius %g\n",rad);
 
         // set the force and moment for this tip segment
         force[rindex][axis] = M_PI*sqrt(lensq)*rad*rad;
         vec_cross (dl, force[rindex], moment[rindex]);
-        fprintf (stderr,"  force %g\n",force[rindex][2]);
-        fprintf (stderr,"  moment %g %g\n",moment[rindex][0],moment[rindex][1]);
+        if (debug) fprintf (stderr,"  force %g\n",force[rindex][2]);
+        if (debug) fprintf (stderr,"  moment %g %g\n",moment[rindex][0],moment[rindex][1]);
 
         // carry this force all the way down to root?
 
@@ -3706,15 +3712,16 @@ rad_ptr add_radius (rad_group_ptr thisRG, double rad, int totrad) {
 /*
  * Generic procedure for creating a new tangent in a tangent group
  */
-tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
-  int tottan) {
+tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x, int tottan) {
 
   int i = 0;
-  int axis;
+  int axis = -1;
   double dist;
   tan_ptr newtan = NULL;
   tan_ptr curr = NULL;
   tan_ptr currnext = NULL;
+  const bool debug = false;
+  const bool use_tree = false;
 
   if (isnan(x[0])) exit(0);
   if (isnan(x[1])) exit(0);
@@ -3722,12 +3729,14 @@ tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
   // set the index of the new entry, if we use it
   if (tottan == 0) tottan = thisTG->num;
 
+  // using trees for tangents is not really a good idea
+  if (use_tree) {
+
   // first, see if we have this entry already
   if (thisTG->child[0]) {
 
     // there are children, check in the appropriate one
-    if (2.*x[thisTG->axis] <
-        thisTG->child[0]->max[thisTG->axis] + thisTG->child[1]->min[thisTG->axis]) {
+    if (2.*x[thisTG->axis] < thisTG->child[0]->max[thisTG->axis] + thisTG->child[1]->min[thisTG->axis]) {
       newtan = add_tangent (thisTG->child[0], dim, x, tottan);
       // reset the bounds
       for (i=0; i<dim; i++) {
@@ -3755,22 +3764,24 @@ tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
     // there are no children, check all local entries
     curr = thisTG->first;
     while (curr) {
-      //fprintf (stderr,"  checking vs %g\n",curr->r);
+      //fprintf (stderr,"  checking vs %g %g %g\n",curr->x[0],curr->x[1],curr->x[dim-1]);
       dist = 0;
       for (i=0; i<dim; i++) dist += pow(x[i]-curr->x[i],2);
       if (fabs(dist) < EPSILONSQRD) {
         // these are the same tan!
         newtan = curr;
-        //fprintf (stderr,"  found match %g\n",curr->r);
+        //fprintf (stderr,"    found match!\n");
+        break;
       }
       curr = curr->next;
     }
+  }
   }
 
   // if we couldn't find a match, make a new entry
   if (!newtan) {
 
-    fprintf (stderr,"  no match, creating %g %g\n",x[0],x[1]);
+    if (debug) fprintf (stderr,"  no match, creating %g %g %g\n",x[0],x[1],x[dim-1]);
 
     // get memory for the tan
     newtan = (TANGENT*) malloc (sizeof(TANGENT));
@@ -3809,6 +3820,8 @@ tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
       if (x[i] > thisTG->max[i]) thisTG->max[i] = x[i];
     }
 
+    if (use_tree) {
+
     // finally, if we surpassed the bucket size, split this group!
     if (thisTG->num > BUCKET) {
 
@@ -3819,12 +3832,16 @@ tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
       // choose which axis to split (use dist as the max size here)
       dist = 0.;
       for (i=0; i<dim; i++) {
-        fprintf (stderr," %d %g %g\n",i,thisTG->min[i],thisTG->max[i]);
+        if (debug) fprintf (stderr," %d %g %g\n",i,thisTG->min[i],thisTG->max[i]);
         if (thisTG->max[i] - thisTG->min[i] > dist) {
           dist = thisTG->max[i] - thisTG->min[i];
-          fprintf (stderr,"   %d %g\n",i,dist);
+          if (debug) fprintf (stderr,"   %d %g\n",i,dist);
           axis = i;
         }
+      }
+      if (axis < 0) {
+        fprintf (stderr,"  no splitting axis found! quitting!\n");
+        exit(1);
       }
       thisTG->axis = axis;
 
@@ -3901,6 +3918,7 @@ tan_ptr add_tangent (tan_group_ptr thisTG, unsigned char dim, double *x,
       //fprintf (stderr,"                  and num=%d, bounds %g %g\n",
       //         thisTG->child[1]->num,thisTG->child[1]->min[axis],
       //         thisTG->child[1]->max[axis]);
+    }
     }
   }
 
