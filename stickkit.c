@@ -1252,7 +1252,7 @@ void split_segment (seg_ptr thisSP, int dim, int use_spline) {
   newseg = add_segment (thisSP->parent, newnode, thisSP->n[1]);
 
   // now, set the new radius
-  newrad = add_radius (thisSP->parent->radii, radval, 0);
+  if (radval > 0.) newrad = add_radius (thisSP->parent->radii, radval, 0);
 
   // assign a bunch of pointers!
   // first, the new node
@@ -1273,12 +1273,12 @@ void split_segment (seg_ptr thisSP, int dim, int use_spline) {
 
   // then the new segment
   newseg->r[0] = newrad;
-  newseg->r[1] = thisSP->r[1];
+  if (radval > 0.) newseg->r[1] = thisSP->r[1];
   newseg->t[1] = thisSP->t[1];
 
   // and the old segment
   thisSP->n[1] = newnode;
-  thisSP->r[1] = newrad;
+  if (radval > 0.) thisSP->r[1] = newrad;
   thisSP->t[1] = NULL;
 
   // set the two seg flags to indicate that they've participated in a split
@@ -1315,6 +1315,7 @@ void find_seg_midpt_using_midpoint (double *loc, double *rad,
 /*
  * Make the new location at the midpoint of a cubic spline threaded
  *   through the two endpoints
+ * Set the radius only if one of the two radii is set
  */
 void find_seg_midpt_using_spline (double *loc, double *rad,
     seg_ptr thisSP, int dim) {
@@ -1328,6 +1329,9 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   //static double maxdiff = 0.;
   //node_ptr n1 = thisSP->n[0];
   //node_ptr n2 = thisSP->n[1];
+
+  // default is to not set radius, -1. triggers that
+  *rad = -1.;
 
   // test print
   //fprintf(stderr,"\nnode0 at %g %g %g\n",thisSP->n[0]->x[0],thisSP->n[0]->x[1],thisSP->n[0]->x[2]);
@@ -1409,6 +1413,9 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
 
   // Now, do the radius (must find slope of radius?) -------------------
 
+  if (thisSP->r[0] || thisSP->r[1]) {
+    // if either radius exists, do this work, otherwise don't
+
   // find the end radii of this segment
   if (thisSP->r[0]) r0 = thisSP->r[0]->r;
   else r0 = thisSP->parent->radius;
@@ -1418,8 +1425,11 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   // find the length of this segment
   dl = sqrt(vec_dist_sqrd (thisSP->n[0]->x, thisSP->n[1]->x, dim));
 
-  fprintf(stderr,"\ndoing radius between %g and %g, length %g\n",r0,r1,dl);
-  if (r0 < -EPSILON || r1 < -EPSILON) exit(0);
+  //fprintf(stderr,"\ndoing radius between %g and %g, length %g\n",r0,r1,dl);
+  if (r0 < -EPSILON || r1 < -EPSILON) {
+    fprintf(stderr,"\nERROR: bad radii %g or %g\n",r0,r1);
+    exit(0);
+  }
 
   // find the radius of the next node past n[0]
   j = thisSP->n[0]->numconn0 + thisSP->n[0]->numconn1;
@@ -1513,6 +1523,8 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
     *rad = 0.;
     //exit(0);
   }
+
+  } // end if thisSP->r[0] || thisSP->r[1]
 
   return;
 }
