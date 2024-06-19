@@ -1231,8 +1231,9 @@ void split_segment (seg_ptr thisSP, int dim, int use_spline) {
   seg_ptr newseg = NULL;
   node_ptr newnode = NULL;
   rad_ptr newrad = NULL;
+  const bool debug = false;
 
-  fprintf (stderr, "splitting seg %ld, nodes %ld %ld\n",thisSP->index,thisSP->n[0]->index,thisSP->n[1]->index);
+  if (debug) fprintf (stderr, "splitting seg %ld, nodes %ld %ld\n",thisSP->index,thisSP->n[0]->index,thisSP->n[1]->index);
 
   // locate the new node
 
@@ -1329,6 +1330,7 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   //static double maxdiff = 0.;
   //node_ptr n1 = thisSP->n[0];
   //node_ptr n2 = thisSP->n[1];
+  const bool debug = false;
 
   // default is to not set radius, -1. triggers that
   *rad = -1.;
@@ -1338,7 +1340,7 @@ void find_seg_midpt_using_spline (double *loc, double *rad,
   //fprintf(stderr,"node1 at %g %g %g\n",thisSP->n[1]->x[0],thisSP->n[1]->x[1],thisSP->n[1]->x[2]);
 
   // is a tangent defined here?
-  fprintf(stderr,"making tangents\n");
+  if (debug) fprintf(stderr,"making tangents\n");
   if (!thisSP->t[0] || !thisSP->t[1]) find_seg_tangents (thisSP, dim);
 
   //fprintf(stderr,"  tangent0 %g %g %g\n",thisSP->t[0]->x[0],thisSP->t[0]->x[1],thisSP->t[0]->x[dim-1]);
